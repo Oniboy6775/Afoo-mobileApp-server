@@ -1,0 +1,5 @@
+.env
+/node_modules
+./updateDetails.js
+./test.js
+vpayTest.js
