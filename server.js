@@ -89,5 +89,8 @@ const start = async () => {
 app.use("/api/v1/*", (req, res) => {
   res.status(404).json({ msg: "route not found" });
 });
+app.use("/", (req, res) => {
+  res.status(200).json({ msg: "The server is working fine" });
+});
 
 start();

@@ -33,12 +33,13 @@ const adminDetails = async (req, res) => {
   }
 };
 const generateCoupon = async (req, res) => {
-  const { userAccount, amount } = req.body;
+  const { userAccount: userName, amount } = req.body;
   const couponCode = voucher_codes.generate({
     length: 10,
   });
+  const userAccount = userName.trim();
   if (!userAccount || !amount)
-    return res.status(400).json({ msg: "All feilds are required" });
+    return res.status(400).json({ msg: "All fields are required" });
   let user = await User.find({ userName: userAccount });
   if (!user) user = await User.find({ email: userAccount });
   if (user.length < 1)

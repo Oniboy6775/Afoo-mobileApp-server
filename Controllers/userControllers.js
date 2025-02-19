@@ -121,9 +121,8 @@ const register = async (req, res) => {
       });
     const CABLETV = await cabletvModel.find({});
     res.status(200).json({
-      newUser: user,
-      user,
       token,
+      user,
       transactions: [],
       isAdmin: user._id === process.env.ADMIN_ID ? true : false,
       subscriptionPlans: {
