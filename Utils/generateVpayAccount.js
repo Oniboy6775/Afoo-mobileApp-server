@@ -31,7 +31,7 @@ const generateVpayAcc = async ({ email, firstName, lastName, phoneNumber }) => {
     console.log("generating account number...");
 
     // GENERATE ACCOUNT NUMBER ID
-    // console.log({ email, phoneNumber, firstName, lastName });
+    console.log({ email, phoneNumber, firstName, lastName });
     const {
       data: { id: customerId },
     } = await authFetch.post("/api/service/v1/query/customer/add", {
@@ -46,16 +46,7 @@ const generateVpayAcc = async ({ email, firstName, lastName, phoneNumber }) => {
     const { data: userDetails } = await authFetch.get(
       `/api/service/v1/query/customer/${customerId}/show`
     );
-    // console.log(userDetails);
-    //     {
-    // [0]   _id: '6411bfa0493727accb5ced4a',
-    // [0]   nuban: '4600101056',
-    // [0]   email: 'onid@gmail.cm',
-    // [0]   phone: 'MDZN_08108126121',
-    // [0]   contactfirstname: 'Testing',
-    // [0]   contactlastname: 'Testing',
-    // [0]   createdon: '2023-03-15T12:52:48.392Z'
-    // [0] }
+
     if (!userDetails.nuban) {
       console.log("account details not available for this user");
       return;
@@ -67,17 +58,11 @@ const generateVpayAcc = async ({ email, firstName, lastName, phoneNumber }) => {
           reservedAccountNo3: userDetails.nuban,
           reservedAccountBank3: "VFD microfinance bank",
         },
-        $push: {
-          accountNumbers: {
-            bankName: "VFD microfinance bank",
-            accountNumber: userDetails.nuban,
-          },
-        },
       }
     );
   } catch (e) {
-    // console.log({ error: e.response.data });
-    return { status: e.response.data.status, msg: e.response.data.message };
+    console.log(e);
+    // console.log(e.response || e.data.message || e);
   }
 };
 

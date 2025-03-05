@@ -2,7 +2,10 @@ const { UnauthenticatedError } = require("../errors");
 const User = require("../Models/usersModel");
 const jwt = require("jsonwebtoken");
 const auth = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  let authHeader = req.headers.authorization;
+  // console.log(req.headers);
+  if (!authHeader) authHeader = req.headers["x-auth-apikey"];
+  // console.log({ authHeader });
   let token = "";
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const apiToken = authHeader.split(" ")[1];
@@ -20,11 +23,11 @@ const auth = async (req, res, next) => {
     token = req.header("x-auth-token");
   }
 
-  if (!token) {
+  if (!token)
     return res
       .status(401)
       .json({ msg: "No authentication token, authorization denied." });
-  }
+
   try {
     const verified = jwt.verify(token, process.env.JWT_SECRET);
     req.user = verified;

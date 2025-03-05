@@ -2,18 +2,7 @@ const Transaction = require("../Models/transactionModel");
 const Users = require("../Models/usersModel");
 
 const searchTransaction = async (req, res) => {
-  const {
-    type,
-    phoneNumber,
-    transactionId,
-    sort,
-    userName,
-    from,
-    to,
-    status,
-    supplier,
-    id,
-  } = req.query;
+  const { type, phoneNumber, sort, userName, from, to, status } = req.query;
   const { AGENT_1, AGENT_2, AGENT_3, ADMIN_ID } = process.env;
   const agents = [AGENT_1, AGENT_2, AGENT_3];
   const isAgent = agents.find((e) => e === req.user.userId) === req.user.userId;
@@ -25,18 +14,13 @@ const searchTransaction = async (req, res) => {
   }
   // type of transaction
   if (type && type !== "all") {
-    const splittedType = type.split(",");
-    queryObject.trans_Type = { $in: splittedType };
+    console.log({ type });
+    // queryObject.trans_Type = type;
+    queryObject.trans_Type = { $regex: type, $options: "i" };
   }
-  if (supplier && supplier !== "all") {
-    queryObject.trans_supplier = supplier;
-  }
+  // filter with phone number
   if (phoneNumber) {
-    // filter with phone number
     queryObject.phone_number = { $regex: phoneNumber, $options: "i" };
-  }
-  if (transactionId) {
-    queryObject.trans_Id = transactionId;
   }
 
   // filter with transaction status
@@ -59,8 +43,6 @@ const searchTransaction = async (req, res) => {
   }
 
   let result = Transaction.find(queryObject);
-
-  if (!isAdmin) result.select("-trans_profit -trans_supplier");
   if (sort) {
     const sortList = sort.split(",").join(" ");
     result = result.sort(sortList);
@@ -70,7 +52,7 @@ const searchTransaction = async (req, res) => {
 
   // Fetch transactions for the selected day to calculate no of GB sold
 
-  let start = from ? from : new Date().setHours(-1, -1, -1, -1);
+  let start = from ? from : new Date().setHours(0, 0, 0, 0);
   let end = to ? to : new Date().setHours(23, 59, 59, 999);
 
   let query = {
@@ -80,22 +62,117 @@ const searchTransaction = async (req, res) => {
     query.trans_By = req.user.userId;
   }
 
-  // let totalDebit = calculateMoneyFlow("DEBIT");
-  // let totalCredit = calculateMoneyFlow("CREDIT");
+  // Calculating total GB purchased
+  const today = await Transaction.find({ ...queryObject, ...query });
+  const totalSales = today.reduce((acc, cur) => {
+    acc += cur.trans_volume_ratio;
+    return acc;
+  }, 0);
+  // Calculating profit for selected transactions
+  const totalProfit = today.reduce((acc, cur) => {
+    const currentProfit = isNaN(cur.trans_profit) ? 0 : cur.trans_profit;
+    acc += currentProfit;
+    return acc;
+  }, 0);
+
+  const calculateStat = (network, type) => {
+    let result = {
+      network: `${network} ${type}`,
+      profit: 0,
+      total_volume_sold: 0,
+    };
+    let filtered = today.filter(
+      (e) =>
+        e.trans_Type &&
+        e.trans_Network.split(" ")[0] === network &&
+        e.trans_Network.split(" ")[1] === type
+    );
+    // profit
+    result.profit = filtered.reduce((acc, cur) => {
+      const currentProfit = isNaN(cur.trans_profit) ? 0 : cur.trans_profit;
+      acc += currentProfit;
+      return acc;
+    }, 0);
+    // total sales
+    result.total_volume_sold = filtered.reduce((acc, cur) => {
+      acc += cur.trans_volume_ratio;
+      return acc;
+    }, 0);
+    return result;
+  };
+  const calculateMoneyFlow = (type) => {
+    let total = 0;
+    const ADMIN = process.env.ADMIN_ID;
+    if (type === "DEBIT") {
+      const totalDebit = today.reduce((acc, cur) => {
+        if (
+          cur.balance_After < cur.balance_Before &&
+          cur.trans_By !== ADMIN &&
+          cur.trans_Status !== "refunded"
+        ) {
+          acc += cur.trans_amount;
+        }
+        return acc;
+      }, 0);
+      total = totalDebit;
+    }
+    if (type === "CREDIT") {
+      const totalCredit = today.reduce((acc, cur) => {
+        if (
+          cur.balance_After > cur.balance_Before &&
+          cur.trans_By !== ADMIN &&
+          cur.trans_Type !== "refund"
+        ) {
+          acc += cur.trans_amount;
+        }
+        return acc;
+      }, 0);
+      total = totalCredit;
+    }
+    return total;
+  };
+  let mtnSMESales = calculateStat("MTN", "SME");
+  let mtnSME2Sales = calculateStat("MTN", "SME2");
+  let mtnCGSales = calculateStat("MTN", "CG");
+  let mtnCOUPONSales = calculateStat("MTN", "COUPON");
+  let gloSMESales = calculateStat("GLO", "SME");
+  let gloCGSales = calculateStat("GLO", "CG");
+  let AirtelSMESales = calculateStat("AIRTEL", "SME");
+  let AirtelCGSales = calculateStat("AIRTEL", "CG");
+  let NmobileCGSales = calculateStat("9MOBILE", "CG");
+  let NmobileSMESales = calculateStat("9MOBILE", "SME");
+  let totalDebit = calculateMoneyFlow("DEBIT");
+  let totalCredit = calculateMoneyFlow("CREDIT");
+  // console.log({ totalCredit, totalDebit });
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || (isAdmin || isAgent ? 100 : 30);
   const skip = (page - 1) * limit;
   result = await result.skip(skip).limit(limit);
   let noOfTransaction = await Transaction.countDocuments(queryObject);
   const totalPages = Math.ceil(noOfTransaction / limit);
+  // console.log(result);
+  // console.log({ result });
   res.status(200).json({
+    stat: isAdmin
+      ? [
+          mtnSMESales,
+          mtnSME2Sales,
+          mtnCGSales,
+          mtnCOUPONSales,
+          gloSMESales,
+          gloCGSales,
+          AirtelCGSales,
+          AirtelSMESales,
+          NmobileCGSales,
+          NmobileSMESales,
+        ]
+      : [],
     totalPages,
+    totalSales,
+    totalProfit,
+    totalDebit,
+    totalCredit,
     transactions: result,
-    stat: isAdmin ? [] : [],
-    totalSales: 0,
-    totalProfit: 0,
-    totalDebit: 0,
-    totalCredit: 0,
   });
 };
 module.exports = searchTransaction;

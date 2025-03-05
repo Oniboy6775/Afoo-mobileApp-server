@@ -26,50 +26,33 @@ const userSchema = new mongoose.Schema({
       amountEarn: 0,
     },
   ],
+  accountNumbers: [{ bankName: String, accountNumber: String }],
+  referrals: [{ userName: String, totalEarned: Number }],
+
   userName: { type: String, required: true, lowercase: true, trim: true },
   phoneNumber: { type: String, required: true, trim: true },
 
   balance: { type: Number },
-  earningBalance: { type: Number },
   apiToken: { type: String },
-  reservedAccountBank: { type: String },
-  reservedAccountNo: { type: String },
-  reservedAccountBank2: { type: String },
-  reservedAccountNo2: { type: String },
-  reservedAccountBank3: { type: String }, //Vpay
-  reservedAccountNo3: { type: String },
-  reservedAccountBank4: { type: String }, //pay vessel
-  reservedAccountNo4: { type: String },
-  accountNumbers: [{ bankName: String, accountNumber: String }],
+  lastLogin: { type: Date },
   userType: {
     type: String,
     default: "smart earner",
-    enum: ["smart earner", "reseller", "api user", "partner"],
+    enum: ["smart earner", "reseller", "api user"],
   },
-  // partner related fields
-  isPartner: { type: Boolean, default: false },
-  withdrawalDetails: {
-    bank: "",
-    bankCode: "",
-    accountNumber: "",
-    nameOnAccount: "",
-  },
-  isSpecial: { type: Boolean, default: false },
-  specialPrices: [{ productName: "", price: "" }],
   balance: { type: Number, default: 0 },
-  lastLogin: { type: Date },
-  webhookUrl: { type: String },
-  fullName: { type: String, default: "" },
-  bvn: { type: String, default: "" },
-  nin: { type: String, default: "" },
   createdAt: {
     type: Date,
     default: Date.now,
+    // expires: 2592000, // this is the expiry time in seconds(expires in month time)
   },
   updatedAt: {
     type: Date,
     default: Date.now,
   },
+  fullName: { type: String, default: "" },
+  bvn: { type: String, default: "" },
+  nin: { type: String, default: "" },
 });
 
 userSchema.pre("save", async function () {
@@ -104,17 +87,5 @@ userSchema.methods.createJWT = function () {
     }
   );
 };
-
-// Virtual getter to handle empty KYC details
-// userSchema.virtual("formattedKycDetails", {
-//   get() {
-//     const { fullName, bvn, nin } = this.kycDetails;
-//     return {
-//       fullName: fullName || "",
-//       bvn: bvn || "",
-//       nin: nin || "",
-//     };
-//   },
-// });
 
 module.exports = mongoose.model("User", userSchema);

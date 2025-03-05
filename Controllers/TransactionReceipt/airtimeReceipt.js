@@ -10,12 +10,10 @@ const airtimeReceipt = async (payload) => {
     amountToCharge,
     balance,
     userId,
-    userName,
   } = payload;
   const newTransaction = Transaction({
     trans_Id: uuid(),
     trans_By: userId,
-    trans_UserName: userName,
     trans_Type: "airtime",
     trans_Network: `${plan_network} ${plan_amount}`,
     phone_number: mobile_number,

@@ -6,7 +6,6 @@ const transactionsSchema = new mongoose.Schema({
   trans_UserName: { type: String },
   trans_Type: { type: String, required: true },
   trans_Network: { type: String, required: true },
-  trans_supplier: { type: String },
   phone_number: { type: String },
   trans_amount: { type: Number, required: true },
   trans_profit: { type: Number, default: 0 },
@@ -14,7 +13,6 @@ const transactionsSchema = new mongoose.Schema({
   balance_Before: { type: Number, required: true },
   balance_After: { type: Number, required: true },
   trans_Date: { type: String },
-  earningId: { type: String },
   paymentLink: { type: String },
   trans_Status: { type: String },
   apiResponseId: { type: String },
@@ -22,8 +20,7 @@ const transactionsSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-    // expires: 2592000, // this is the expiry time in seconds(expires in month time)
-    expires: 1296000, // this is the expiry time in seconds(expires in 2 weeks time)
+    expires: 2592000, // this is the expiry time in seconds(expires in month time)
   },
 });
 

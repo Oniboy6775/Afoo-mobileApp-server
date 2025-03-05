@@ -6,11 +6,7 @@ const { v4: uuid } = require("uuid");
 const { COUPON_RECEIPT } = require("./TransactionReceipt");
 const Flutterwave = require("flutterwave-node-v3");
 const sha512 = require("js-sha512").sha512;
-const crypto = require("crypto");
-const generateReceipt = require("./generateReceipt");
 const jwt = require("jsonwebtoken");
-const { sendPushNotification } = require("../Utils/expo/notification");
-const pushNotificationModel = require("../Models/pushNotificationModel");
 
 const coupon = async (req, res) => {
   const { userId } = req.user;
@@ -61,7 +57,7 @@ const coupon = async (req, res) => {
 const initiateFlutterwave = async (req, res) => {
   // res.status(200).json({ msg: "initiate flutterwave fund" });
   return res.status(400).json({
-    msg: "Kindly use the account number on your dashboard to fund your wallet",
+    msg: "Kindly use the account number on your dashboard to find your wallet",
   });
   const { amount } = req.body;
   const userId = req.user.userId;
@@ -180,16 +176,11 @@ const flutterwave = async (req, res) => {
 const monnify = async (req, res) => {
   res.sendStatus(200);
   const stringifiedBody = JSON.stringify(req.body);
-  if (!process.env.MONNIFY_API_SECRET) {
-    console.log("no API secret");
-    return;
-  }
   const computedHash = sha512.hmac(
     process.env.MONNIFY_API_SECRET,
     stringifiedBody
   );
   const monnifySignature = req.headers["monnify-signature"];
-  // console.log({ monnifySignature, computedHash });
   if (!monnifySignature) return;
   if (monnifySignature != computedHash) return;
 
@@ -198,166 +189,34 @@ const monnify = async (req, res) => {
     eventData: {
       paidOn,
       settlementAmount,
-      amountPaid,
       customer: { email },
-      destinationAccountInformation,
     },
   } = req.body;
   if (eventType !== "SUCCESSFUL_TRANSACTION") return;
   if (!req.body.eventData.customer.email) return;
-  if (email == "ajala802@gmail.com") return;
   let user = await User.findOne({ email });
-
+  
   if (!user) return;
   const { _id, balance, userName } = user;
   // INCREMENT USER BALANCE
-  // console.log(req.body);
-  let amountToCredit = settlementAmount;
-  let bankName = destinationAccountInformation.bankName;
-  let accountNumber = destinationAccountInformation.accountNumber;
-  let charges = (amountPaid - settlementAmount).toFixed(2);
-  // let amountToCredit = amountPaid;
-  if (user.userType == "api user") amountToCredit = settlementAmount;
-  await User.updateOne({ _id }, { $inc: { balance: amountToCredit } });
-  await generateReceipt({
-    transactionId: uuid(),
-    planNetwork: "Auto-funding||",
-    status: "success",
-    planName: `${bankName || "monnify"} ₦${amountPaid}`,
-    phoneNumber: accountNumber || userName,
-    response: `A payment of ₦${amountPaid} received from ${bankName || ""} ${
-      accountNumber || ""
-    }. ₦${settlementAmount} has been credited and ₦${charges} bank charges has been deducted`,
-    amountToCharge: Number(amountToCredit),
-    balance: balance,
-    userId: _id,
-    userName: userName,
-    type: "wallet",
-    increased: true,
-    // wavedAmount: settlementAmount - amountToCredit,
-  });
-  // send push notification
-  const notificationExist = await pushNotificationModel.findOne({
-    userId: _id,
-    pushIsActive: true,
-  });
-  if (notificationExist)
-    sendPushNotification({
-      title: "Payment successful",
-      body: `Your wallet has been funded with ${settlementAmount}`,
-      pushTokens: [notificationExist.pushToken],
-    });
+  await User.updateOne({ _id }, { $inc: { balance: settlementAmount } });
+  // Generate transaction
+  const transactionDetails = {
+    trans_Id: uuid(),
+    trans_By: _id,
+    trans_Type: "wallet",
+    trans_Network: `Auto-funding-SUCCESS||MNFY`,
+    phone_number: `${userName}`,
+    trans_amount: settlementAmount,
+    balance_Before: balance,
+    balance_After: balance + parseInt(settlementAmount),
+    trans_Date: paidOn,
+    trans_Status: "success",
+    createdAt: Date.now(),
+  };
+  await Transaction(transactionDetails).save();
 };
-
-// Initial Squad
-const initiateSquad = async (req, res) => {
-  const { amount, email } = req.body;
-  const { userId } = req.user;
-  const user = await User.findOne({ _id: userId });
-  if (!email || !amount)
-    return res.status(400).json({ msg: "Please provide all values" });
-  try {
-    const initiate = await axios.post(
-      `${process.env.SQUAD_API_URL}/transaction/initiate`,
-      {
-        amount: amount * 100,
-        email,
-        currency: "NGN",
-        initiate_type: "inline",
-        callback_url: `https://${process.env.FRONTEND_URL}/profile/dashboard`,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.SQUAD_SECRET_KEY}`,
-        },
-      }
-    );
-    const { data } = initiate.data;
-    const transactionDetails = {
-      transactionId: data.transaction_ref,
-      planNetwork: `Auto-funding||SQUAD`,
-      status: "pending",
-      planName: `₦${parseFloat(data.transaction_amount / 100)}`,
-      type: "wallet",
-      phoneNumber: user.userName,
-      amountToCharge: parseFloat(data.transaction_amount / 100),
-      balance: user.balance,
-      userId: userId,
-      userName: user.userName,
-      increased: "none",
-    };
-
-    await generateReceipt(transactionDetails);
-    res.status(200).json({
-      msg: "Payment Initiated",
-      link: data.checkout_url,
-    });
-  } catch (e) {
-    console.log(e);
-    console.log(e.response);
-    return res.status(500).json({ msg: "Something went wrong" });
-  }
-};
-// creditingWallet
-// const squadSuccessful = async (req, res) => {
-//   res.sendStatus(200);
-//   console.log(req.body);
-//   const hash = crypto
-//     .createHmac("sha512", process.env.SQUAD_SECRET_KEY)
-//     .update(JSON.stringify(req.body))
-//     .digest("hex")
-//     .toUpperCase();
-//   if (hash != req.headers["x-squad-encrypted-body"]) return;
-//   if (req.body.Event !== "charge_successful") return;
-//   const {
-//     transaction_ref,
-//     transaction_status,
-//     email,
-//     // transaction_type,
-//     // amount,
-//     merchant_amount,
-//   } = req.body.Body;
-//   try {
-//     const user = await User.findOne({ email });
-//     const transaction = await Transaction.findOne({
-//       trans_Id: transaction_ref,
-//     });
-//     if (!transaction) return;
-
-//     // updating transaction
-
-//     await Transaction.updateOne(
-//       {
-//         trans_Id: transaction_ref,
-//         phone_number: user.userName,
-//       },
-//       {
-//         $set: {
-//           trans_amount: parseFloat(merchant_amount / 100),
-//           balance_Before: user.balance,
-//           balance_After: user.balance + parseFloat(merchant_amount / 100),
-//           trans_Date: Date.now(),
-//           trans_Status: transaction_status,
-//           paymentLink: "",
-//           trans_Status: "success",
-//         },
-//       }
-//     );
-
-//     // increase the balance
-
-//     await User.updateOne(
-//       { _id: user._id },
-//       { $inc: { balance: merchant_amount / 100 } }
-//     );
-//     res.sendStatus(200);
-//   } catch (e) {
-//     res.sendStatus(500);
-//     console.log("something went wrong");
-//   }
-// };
 const vPay = async (req, res) => {
-  res.sendStatus(200);
   console.log(req.body);
   let secret = req.headers["x-payload-auth"];
   let payload = jwt.decode(secret);
@@ -369,7 +228,7 @@ const vPay = async (req, res) => {
   }
   console.log("secret matched!!!");
   const {
-    amount: amountPaid,
+    amount,
     account_number,
     originator_account_name,
     originator_bank,
@@ -377,7 +236,6 @@ const vPay = async (req, res) => {
     fee,
   } = req.body;
   // checking user to credit
-  if (account_number == "4602773752") return;
   const userToCredit = await User.findOne({
     reservedAccountNo3: account_number,
   });
@@ -386,14 +244,14 @@ const vPay = async (req, res) => {
     return;
   }
   // increasing user balance
-  // let totalCharges = fee;
-  let amountToCredit = amountPaid - fee;
-  // if (userToCredit.userType === "api user")
-  //   amountToCredit = amountPaid - totalCharges;
+  let totalCharges = fee;
+  if (totalCharges > 100) totalCharges = 100;
+  const amountToCredit = amount - totalCharges;
   await User.updateOne(
     { _id: userToCredit._id },
     {
       $inc: { balance: amountToCredit },
+      $set: { trans_profit: fee > 100 ? 100 - fee : 0 },
     }
   );
   // generating receipt
@@ -401,41 +259,22 @@ const vPay = async (req, res) => {
     transactionId: uuid(),
     planNetwork: "Auto-funding||VFD",
     status: "success",
-    planName: `₦${amountPaid}`,
+    planName: `₦${amount}`,
     phoneNumber: account_number,
     amountToCharge: amountToCredit,
     balance: userToCredit.balance,
     userId: userToCredit._id,
     userName: userToCredit.userName,
     type: "wallet",
-    // response: `${originator_account_name} ${originator_account_number} ${}`,
-    response: `A payment of ₦${amountPaid} received from ${
-      originator_bank || ""
-    } ${
-      originator_account_number || ""
-    }. ₦${amountToCredit} has been credited and ₦${fee} bank charges has been deducted`,
+    response: `${originator_account_name} ${originator_account_number} ${originator_bank}`,
     increased: true,
-    // wavedAmount: userToCredit.userType === "api user" ? 0 : -totalCharges,
   });
-  // send push notification
-  const notificationExist = await pushNotificationModel.findOne({
-    userId: userToCredit._id,
-    pushIsActive: true,
-  });
-  if (notificationExist) {
-    sendPushNotification({
-      title: "Payment successful",
-      body: `Your wallet has been funded with ${amountToCredit}`,
-      pushTokens: [notificationExist.pushToken],
-    });
-  }
+  res.sendStatus(200);
 };
 module.exports = {
   coupon,
   initiateFlutterwave,
   flutterwave,
   monnify,
-  initiateSquad,
-  // squadSuccessful,
   vPay,
 };

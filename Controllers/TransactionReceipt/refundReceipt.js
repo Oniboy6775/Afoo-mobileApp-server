@@ -1,6 +1,5 @@
 const { v4: uuid } = require("uuid");
 const Transaction = require("../../Models/transactionModel");
-const User = require("../../Models/usersModel");
 const refundReceipt = async (payload) => {
   if (payload.isOwner) {
     // receipt for  transaction owner
@@ -12,7 +11,6 @@ const refundReceipt = async (payload) => {
       balance: ownerBalance,
       isOwner,
     } = payload;
-    const { userName } = await User.findOne({ _id: trans_By });
     const newTransaction = Transaction({
       trans_Id: uuid(),
       trans_By: trans_By,
@@ -21,12 +19,9 @@ const refundReceipt = async (payload) => {
       phone_number: phone_number,
       trans_amount: trans_amount,
       balance_Before: ownerBalance,
-      trans_UserName: userName,
       balance_After: ownerBalance + trans_amount,
       trans_Date: `${new Date().toDateString()} ${new Date().toLocaleTimeString()}`,
       trans_Status: "success",
-      trans_profit: 0,
-      trans_volume_ratio: 0,
       createdAt: Date.now(),
     });
 
@@ -41,9 +36,9 @@ const refundReceipt = async (payload) => {
       trans_Network,
       sponsorId,
       userName,
-      bonus,
+      bonus
     } = payload;
-
+    
     const newTransaction = Transaction({
       trans_Id: uuid(),
       trans_By: sponsorId,

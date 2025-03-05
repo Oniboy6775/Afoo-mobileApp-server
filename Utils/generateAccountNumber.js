@@ -1,6 +1,7 @@
 const User = require("../Models/usersModel");
 const axios = require("axios");
-const generateAccountNumber = async ({ userName, email, bvn, nin }) => {
+const generateAccountNumber = async (payload) => {
+  const { userName, email } = payload;
   const { MONNIFY_API_URL, MONNIFY_API_ENCODED, MONNIFY_API_CONTRACT_CODE } =
     process.env;
   try {
@@ -26,8 +27,6 @@ const generateAccountNumber = async ({ userName, email, bvn, nin }) => {
         customerEmail: email,
         customerName: userName,
         getAllAvailableBanks: true,
-        bvn,
-        nin,
       },
       {
         headers: {
@@ -37,30 +36,28 @@ const generateAccountNumber = async ({ userName, email, bvn, nin }) => {
     );
     // console.log("generating account number for the new user");
     // console.log(accountDetails.data.responseBody.accounts);
-    // const { bankName, accountNumber } =
-    //   accountDetails.data.responseBody.accounts[0];
-    // const { bankName: bankName2, accountNumber: accountNumber2 } =
-    //   accountDetails.data.responseBody.accounts[1];
+    const { bankName, accountNumber } =
+      accountDetails.data.responseBody.accounts[0];
+    const { bankName: bankName2, accountNumber: accountNumber2 } =
+      accountDetails.data.responseBody.accounts[1];
     let userToUpdate = await User.findOne({ userName });
     if (!userToUpdate) userToUpdate = await User.findOne({ email });
     await User.updateOne(
       { _id: userToUpdate._id },
       {
-        // $set: {
-        //   reservedAccountNo: accountNumber,
-        //   reservedAccountBank: bankName,
-        //   reservedAccountNo2: accountNumber2,
-        //   reservedAccountBank2: bankName2,
-        // },
-        $push: { accountNumbers: accountDetails.data.responseBody.accounts },
+        $set: {
+          reservedAccountNo: accountNumber,
+          reservedAccountBank: bankName,
+          reservedAccountNo2: accountNumber2,
+          reservedAccountBank2: bankName2,
+        },
       }
     );
-    return { status: true, msg: "Verified Successfully" };
+
     // console.log("generated");
     // console.log(" account number generated for the new user");
   } catch (error) {
     console.log(error);
-    return { status: false, msg: error.response.data.responseMessage };
   }
 };
 module.exports = generateAccountNumber;

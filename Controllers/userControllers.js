@@ -4,16 +4,14 @@ const randomToken = require("rand-token");
 const { v4: uuid } = require("uuid");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
-const axios = require("axios");
 
 // MODELS
 const User = require("../Models/usersModel");
 const Data = require("../Models/dataModel");
 const Transaction = require("../Models/transactionModel");
 const Token = require("../Models/tokenModel");
+const Contact = require("../Models/contactModel");
 const cabletvModel = require("../Models/cabletvModel");
-const servicesModel = require("../Models/servicesModel");
-
 // UTILS
 const newReferral = require("../Utils/newReferral");
 const sendEmail = require("../Utils/sendMail");
@@ -25,38 +23,21 @@ const { disco } = require("../API_DATA/disco");
 const { network } = require("../API_DATA/network");
 const { TRANSFER_RECEIPT, BONUS_RECEIPT } = require("./TransactionReceipt");
 const { MTN_CG, MTN_SME } = require("../API_DATA/newData");
-const generateVpayAcc = require("../Utils/generateVpayAccount");
-const Contact = require("../Models/contactModel");
-const Referral = require("../Models/referralModel");
-const { addReferral } = require("../Utils/referralBonus");
-const generateReceipt = require("./generateReceipt");
-const generatePayVessel = require("../Utils/generatePayVessel");
-const pushNotificationModel = require("../Models/pushNotificationModel");
-const { sendPushNotification } = require("../Utils/expo/notification");
+// const generateVpayAcc = require("../Utils/generateVpayAccount");
+const generateAcc = require("../Utils/accountNumbers");
+const { default: axios } = require("axios");
+
 const register = async (req, res) => {
-  let {
-    email,
-    password,
-    passwordCheck,
-    userName,
-    referredBy,
-    phoneNumber,
-    verificationMethod,
-    verificationNo,
-  } = req.body;
-  // console.log(req.body);
+  let { email, password, passwordCheck, userName, referredBy, phoneNumber } =
+    req.body;
+
   // validate
-  // if (!verificationMethod || !verificationNo) {
-  //   return res
-  //     .status(400)
-  //     .json({ message: "Kindly provide a verification method: NIN or BVN " });
-  // }
+
   if (!email || !password || !passwordCheck || !userName || !phoneNumber) {
     return res.status(400).json({ msg: "Not all fields have been entered." });
   }
-  if (phoneNumber.length != 11) {
-    return res.status(400).json({ msg: "Enter a valid phone number" });
-  }
+  if (phoneNumber.length != "11")
+    return res.status(400).json({ msg: "Please enter a valid phone number" });
   if (password.length < 5)
     return res
       .status(400)
@@ -79,9 +60,10 @@ const register = async (req, res) => {
   try {
     await User.create({ ...req.body });
     // generate account number
+    await generateAcc({ userName, email });
     const user = await User.findOne({ email });
     const token = user.createJWT();
-    const allDataList = await Data.find().sort("dataplan_id");
+    const allDataList = await Data.find();
     const MTN_SME_PRICE = allDataList
       .filter((e) => e.plan_network === "MTN")
       .map((e) => {
@@ -121,8 +103,9 @@ const register = async (req, res) => {
       });
     const CABLETV = await cabletvModel.find({});
     res.status(200).json({
-      token,
+      newUser: user,
       user,
+      token,
       transactions: [],
       isAdmin: user._id === process.env.ADMIN_ID ? true : false,
       subscriptionPlans: {
@@ -136,20 +119,7 @@ const register = async (req, res) => {
         NETWORK: network,
       },
     });
-    if (referredBy) {
-      addReferral({ userName, sponsorId: referredBy });
-    }
-    // await sendEmail(
-    //   email,
-    //   "Registration Successful",
-    //   {
-    //     name: fullName,
-    //     link: process.env.FRONTEND_URL,
-    //     businessName: process.env.BUSINESS_NAME,
-    //     userName: userName,
-    //   },
-    //   "../templates/registrationsuccess.handlebars"
-    // );
+    if (referredBy) newReferral(req.body);
 
     return;
   } catch (error) {
@@ -157,7 +127,6 @@ const register = async (req, res) => {
   }
 };
 const login = async (req, res) => {
-  const { AGENT_1, AGENT_2, AGENT_3, ADMIN_ID } = process.env;
   const { userName, password } = req.body;
   if (!userName || !password)
     return res.status(400).json({ msg: "Not all fields have been entered." });
@@ -171,48 +140,26 @@ const login = async (req, res) => {
   if (!isPasswordCorrect)
     return res.status(400).json({ msg: "Incorrect password" });
   // generate account number
-  // if (!user.reservedAccountNo) {
-  //   await generateAccountNumber({
-  //     userName,
-  //     email: user.email,
-  //     bvn: user.bvn || "",
-  //     nin: user.nin || "",
-  //   });
-  // }
-  // if (!user.reservedAccountNo3) {
-  //   console.log("no Vpay account number for this user\n generating.... ");
+  if (user.accountNumbers.length < 1)
+    await generateAcc({ userName, email: user.email });
 
-  //   let firstName = user.userName.split(" ")[0];
-  //   let lastName = user.userName.split(" ")[1] || user.userName;
-  //   let phoneNumber = user.phoneNumber;
-  //   let email = user.email;
-  //   // await generateVpayAcc({ email, firstName, lastName, phoneNumber });
-  // }
   const token = user.createJWT();
   const isReseller = user.userType === "reseller";
   const isApiUser = user.userType === "api user";
 
-  const allDataList = await Data.find().sort("volumeRatio");
-  let userTransaction = [];
-  if (ADMIN_ID === user._id) {
-    userTransaction = await Transaction.find().limit(20).sort("-createdAt");
-  } else {
-    userTransaction = await Transaction.find({ trans_By: user._id })
-      .limit(10)
-      .sort("-createdAt")
-      .select("-trans_profit -trans_supplier");
-  }
+  const userTransaction = await Transaction.find({ trans_By: user._id })
+    .limit(100)
+    .sort("-createdAt");
+  const allDataList = await Data.find();
+
   const MTN_SME_PRICE = allDataList
     .filter((e) => e.plan_network === "MTN")
     .map((e) => {
-      const { resellerPrice, my_price, id, apiPrice } = e;
+      const { resellerPrice, my_price, id } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -221,14 +168,11 @@ const login = async (req, res) => {
   const GLO_PRICE = allDataList
     .filter((e) => e.plan_network === "GLO")
     .map((e) => {
-      const { my_price, resellerPrice, apiPrice } = e;
+      const { my_price, resellerPrice } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -236,14 +180,11 @@ const login = async (req, res) => {
   const AIRTEL_PRICE = allDataList
     .filter((e) => e.plan_network === "AIRTEL")
     .map((e) => {
-      const { my_price, resellerPrice, apiPrice } = e;
+      const { my_price, resellerPrice } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -251,14 +192,11 @@ const login = async (req, res) => {
   const NMOBILE_PRICE = allDataList
     .filter((e) => e.plan_network === "9MOBILE")
     .map((e) => {
-      const { my_price, resellerPrice, apiPrice } = e;
+      const { my_price, resellerPrice } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -274,21 +212,28 @@ const login = async (req, res) => {
     );
     user.apiToken === generatedRandomToken;
   }
-  if (!user.reservedAccountNo4) {
-    generatePayVessel({
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      userName: user.userName,
-    });
-  }
-  const agents = [AGENT_1, AGENT_2, AGENT_3];
-  const isAgent = agents.find((e) => e === user._id);
+
   return res.status(200).json({
     token: token,
-    user: user,
+    // user: {
+    //   userName: user.userName,
+    //   fullName: user.userName,
+    //   email: user.email,
+    //   balance: user.balance,
+    //   apiToken: user.apiToken,
+    //   reservedAccountNo: user.reservedAccountNo,
+    //   reservedAccountBank: user.reservedAccountBank,
+    //   reservedAccountNo2: user.reservedAccountNo2,
+    //   reservedAccountBank2: user.reservedAccountBank2,
+    // },
+    user,
     transactions: userTransaction,
-    isAdmin: user._id === ADMIN_ID ? true : false,
-    isAgent: user._id === isAgent ? true : false,
+    isAdmin: user._id === process.env.ADMIN_ID ? true : false,
+    isCouponVendor:
+      user._id === process.env.COUPON_VENDOR_FAIZ ||
+      user._id === process.env.COUPON_VENDOR_YUSUF
+        ? true
+        : false,
     subscriptionPlans: {
       MTN: MTN_SME_PRICE,
       GLO: GLO_PRICE,
@@ -301,52 +246,29 @@ const login = async (req, res) => {
     },
   });
 };
-const fetchUser = async (req, res) => {
-  const { userId } = req.user;
-  const { fields } = req.query;
-  let selections;
-  try {
-    let user = User.findById(userId);
-    if (fields) {
-      selections = fields.split(",").join(" ");
-      user.select(selections);
-    }
-    user = await user;
-    res.status(200).json(user);
-  } catch (error) {
-    console.log(error);
-  }
-};
+
 const userData = async (req, res) => {
   // return details of the user and purchase objects
   const { userId, userType } = req.user;
   const isReseller = userType === "reseller";
   const isApiUser = userType === "api user";
   let user = await User.findOne({ _id: userId });
-  const { AGENT_1, AGENT_2, AGENT_3, ADMIN_ID } = process.env;
-  const agents = [AGENT_1, AGENT_2, AGENT_3];
-  const isAgent = agents.find((e) => e === userId);
-  let userTransaction = "";
-  if (ADMIN_ID === userId) {
-    userTransaction = await Transaction.find().limit(20).sort("-createdAt");
-  } else {
-    userTransaction = await Transaction.find({ trans_By: userId })
-      .limit(10)
-      .sort("-createdAt")
-      .select("-trans_profit -trans_supplier");
-  }
+  // const data = await Data.find();
+  // console.log(data);
+  const userTransaction = await Transaction.find({ trans_By: userId })
+    .limit(10)
+    .sort("-createdAt");
   const allDataList = await Data.find().sort("dataplan_id");
+  // const allDataList = MTN_SME;
+
   const MTN_SME_PRICE = allDataList
     .filter((e) => e.plan_network === "MTN")
     .map((e) => {
-      const { resellerPrice, my_price, id, apiPrice } = e;
+      const { resellerPrice, my_price, id } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -355,14 +277,11 @@ const userData = async (req, res) => {
   const GLO_PRICE = allDataList
     .filter((e) => e.plan_network === "GLO")
     .map((e) => {
-      const { my_price, resellerPrice, apiPrice } = e;
+      const { my_price, resellerPrice } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -370,14 +289,11 @@ const userData = async (req, res) => {
   const AIRTEL_PRICE = allDataList
     .filter((e) => e.plan_network === "AIRTEL")
     .map((e) => {
-      const { my_price, resellerPrice, apiPrice } = e;
+      const { my_price, resellerPrice } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -385,14 +301,11 @@ const userData = async (req, res) => {
   const NMOBILE_PRICE = allDataList
     .filter((e) => e.plan_network === "9MOBILE")
     .map((e) => {
-      const { my_price, resellerPrice, apiPrice } = e;
+      const { my_price, resellerPrice } = e;
       let price = my_price;
 
-      if (isReseller) {
+      if (isReseller || isApiUser) {
         price = resellerPrice;
-      }
-      if (isApiUser) {
-        price = apiPrice;
       }
       e["plan_amount"] = price;
       return e;
@@ -407,15 +320,16 @@ const userData = async (req, res) => {
     );
     user.apiToken === generatedRandomToken;
   }
-  let newToken = await user.createJWT();
+
   res.status(200).json({
-    // user: { ...user, balance: user.balance.toFixed(2) },
-    user: user,
-    token: newToken,
-    newToken: newToken,
+    user,
     transactions: userTransaction,
-    isAdmin: userId === ADMIN_ID ? true : false,
-    isAgent: userId === isAgent ? true : false,
+    isAdmin: userId === process.env.ADMIN_ID ? true : false,
+    isCouponVendor:
+      userId === process.env.COUPON_VENDOR_FAIZ ||
+      userId === process.env.COUPON_VENDOR_YUSUF
+        ? true
+        : false,
     subscriptionPlans: {
       MTN: MTN_SME_PRICE,
       GLO: GLO_PRICE,
@@ -428,30 +342,7 @@ const userData = async (req, res) => {
     },
   });
 };
-const generateVpay = async (req, res) => {
-  const { userId } = req.user;
-  try {
-    const user = await User.findOne({ _id: userId });
-    let firstName = user.userName.split(" ")[0];
-    let lastName = user.userName.split(" ")[1] || user.userName;
-    let phoneNumber = user.phoneNumber;
-    let email = user.email;
-    const { status, msg } = await generateVpayAcc({
-      email,
-      firstName,
-      lastName,
-      phoneNumber,
-    });
 
-    res
-      .status(status ? 200 : 500)
-      .json({ msg: msg || "Vpay account number created" });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ msg: "unable to create Vpay account number, try again later" });
-  }
-};
 const updateUser = async (req, res) => {
   const {
     user: { userId },
@@ -549,16 +440,12 @@ const validateToken = async (req, res) => {
     res.status(500).json({ msg: err.message });
   }
 };
-
 const requestPasswordReset = async (req, res) => {
   // res.status(200).json({ msg: "password reet successful" });
   const { email } = req.body;
-  if (!email)
-    return res
-      .status(400)
-      .json({ msg: "Please provide valid email or username" });
-  let user = await User.findOne({ email: email });
-  if (!user) user = await User.findOne({ userName: email });
+  if (!email) return res.status(400).json({ msg: "Please provide email" });
+  const user = await User.findOne({ email: email });
+
   if (!user)
     return res
       .status(400)
@@ -582,12 +469,12 @@ const requestPasswordReset = async (req, res) => {
     sendEmail(
       user.email,
       "Password Reset Request",
-      { name: user.userName, link: link },
+      { name: user.fullName, link: link },
       "../templates/requestResetPassword.handlebars"
     );
 
     return res.status(200).json({
-      msg: `An email has been sent to ${user.email}. Kindly check your email. Check spam folder if not found`,
+      msg: "An email has been sent to you. Kindly check your email. Check spam folder if not found",
     });
   } catch (error) {
     console.log(error);
@@ -720,6 +607,7 @@ const resetPin = async (req, res) => {
   }
 };
 const transferFund = async (req, res) => {
+  // res.status(200).json({msg:"tranfer successful"})
   const { userName, amount, userPin } = req.body;
   const { userId } = req.user;
 
@@ -736,7 +624,12 @@ const transferFund = async (req, res) => {
 
   if (userId !== process.env.ADMIN_ID)
     return res.status(400).json({ msg: "Only admin can access this route" });
-  if (amount < 500 && userId !== process.env.ADMIN_ID)
+  if (
+    amount < 500 &&
+    userId !== process.env.ADMIN_ID &&
+    userId !== process.env.COUPON_VENDOR_FAIZ &&
+    userId !== process.env.COUPON_VENDOR_YUSUF
+  )
     return res.status(400).json({ msg: "Minimum transfer is ₦500" });
   if (userName === sender.userName)
     return res.status(400).json({ msg: "You cannot transfer to yourself" });
@@ -756,7 +649,9 @@ const transferFund = async (req, res) => {
     });
     if (senderResponse) {
       // Remove amount from sender balance
+      console.log("before");
       await User.updateOne({ _id: userId }, { $inc: { balance: -amount } });
+      console.log("after");
     }
     const receiverResponse = await TRANSFER_RECEIPT({
       isSender: false,
@@ -767,27 +662,16 @@ const transferFund = async (req, res) => {
     if (receiverResponse) {
       // add amount to receiver balance
       await User.updateOne(
-        { _id: receiver._id },
+        { userName: userName },
         { $inc: { balance: amount } }
       );
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       msg: `You have successfully transfer ₦${amount} to ${userName}`,
       amount: amount,
       receipt: senderResponse,
     });
-    const pushTokenExit = await pushNotificationModel.findOne({
-      userId,
-      pushIsActive: true,
-    });
-    if (pushTokenExit) {
-      sendPushNotification({
-        title: "Wallet funded",
-        body: `${receiver.userName},your wallet has been funded with ₦${amount}`,
-        pushTokens: [pushTokenExit.pushToken],
-      });
-    }
   } catch (error) {
     // if error return the amount to sender
 
@@ -827,33 +711,12 @@ const changePassword = async (req, res) => {
 
 const validateUser = async (req, res) => {
   try {
-    let user = await User.findOne({
-      userName: req.params.userName,
-    }).select("email");
-    if (!user)
-      user = await User.findOne({
-        email: req.params.userName,
-      }).select("email");
-    if (user) {
-      return res.status(200).json({ msg: user.email });
-    } else {
-      return res.status(404).json({ msg: "user does not exist" });
-    }
+    let user = await User.findOne({ userName: req.params.userName });
+    if (!user) user = await User.findOne({ email: req.params.userName });
+    if (!user) return res.status(404).json({ msg: "user does not exist" });
+    return res.status(200).json({ msg: user.email });
   } catch (error) {
     console.log(error);
-  }
-};
-const updateWebhookUrl = async (req, res) => {
-  const { webhookUrl } = req.body;
-  console.log(webhookUrl);
-  const startWithHttps = webhookUrl.startsWith("https://");
-  if (!startWithHttps)
-    return res.status(400).json({ msg: "must start with https://" });
-  try {
-    await User.updateOne({ _id: req.user.userId }, { $set: { webhookUrl } });
-    return res.status(200).json({ msg: "webhook updated successfully" });
-  } catch (error) {
-    return res.status(500).json({ msg: "something went wrong" });
   }
 };
 // Contacts controller
@@ -938,175 +801,28 @@ const deleteContact = async (req, res) => {
     res.status(500).json({ msg: "something went wrong" });
   }
 };
-const fetchReferral = async (req, res) => {
-  const { userId } = req.user;
-  const { page } = req.query;
+const updateWebhookUrl = async (req, res) => {
+  const { webhookUrl } = req.body;
+  console.log(webhookUrl);
+  const startWithHttps = webhookUrl.startsWith("https://");
+  if (!startWithHttps)
+    return res.status(400).json({ msg: "must start with https://" });
   try {
-    // const
-    //   let result = Referral.find(queryObject);
-    console.log(userId);
-    const { userName, earningBalance } = await User.findOne({ _id: userId });
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-    const referralList = await Referral.find({ referredBy: userName })
-      .skip(skip)
-      .limit(limit);
-
-    const totalReferred = await Referral.find({
-      referredBy: userName,
-    }).countDocuments();
-    // console.log(referralList);
-    let totalEarned = referralList.reduce((acc, curr) => {
-      return (acc += curr.amountEarned);
-    }, 0);
-
-    res.status(200).json({
-      msg: "fetched",
-      referralList: referralList.reverse(),
-      earningBalance,
-      totalEarned,
-      totalReferred,
-    });
+    await User.updateOne({ _id: req.user.userId }, { $set: { webhookUrl } });
+    return res.status(200).json({ msg: "webhook updated successfully" });
   } catch (error) {
-    console.log(error);
-  }
-};
-const withdrawEarning = async (req, res) => {
-  const { userId } = req.user;
-  try {
-    const { balance, earningBalance, userName, isPartner } = await User.findOne(
-      {
-        _id: userId,
-      }
-    );
-    let amountToWithdraw = earningBalance;
-
-    // check if the user reach the minimum withdrawal
-    if (!earningBalance || earningBalance < 20)
-      return res.status(400).json({ msg: "Minimum withdrawal is ₦20 " });
-    //check if he has sufficient amount
-    if (amountToWithdraw > earningBalance)
-      return res
-        .status(400)
-        .json({ msg: "Insufficient balance for this operation" });
-    //deduct from earning balance
-    await User.updateOne(
-      { _id: userId },
-      { $inc: { earningBalance: -amountToWithdraw } }
-    );
-    if (isPartner) {
-      // Remove 15% charges
-      amountToWithdraw = amountToWithdraw - amountToWithdraw * 0.15;
-      // const {acc}= req.body;
-      await generateReceipt({
-        transactionId: uuid(),
-        planNetwork: "withdrawal",
-        planName: `withdrawal request of ₦${earningBalance} `,
-        phoneNumber: userName,
-        status: "pending",
-        amountToCharge: amountToWithdraw,
-        balance,
-        userId,
-        userName: userName,
-        type: "earning",
-        increased: "none",
-        response: "Earnings withdrawal as a partner",
-      });
-      return res
-        .status(200)
-        .json({ msg: "withdrawal is pending for admin approval" });
-    }
-    // and add to main balance
-    await User.updateOne(
-      { _id: userId },
-      { $inc: { balance: amountToWithdraw } }
-    );
-    //create a transaction for the transfer
-    await generateReceipt({
-      transactionId: uuid(),
-      planNetwork: "withdrawal",
-      planName: `transfer of ₦${earningBalance} to main balance`,
-      phoneNumber: userName,
-      status: "success",
-      amountToCharge: amountToWithdraw,
-      balance,
-      userId,
-      userName: userName,
-      type: "earning",
-      increased: true,
-    });
-    //respond to the request
-    res.status(200).json({ msg: "withdrawal successful" });
-  } catch (error) {
-    // respond to the request
-    console.log(error);
-    res.status(500).json({ msg: "Something went wrong" });
-  }
-};
-const upgradeToPartner = async (req, res) => {
-  const { userId } = req.user;
-  const { bank, accountNumber, bankCode, nameOnAccount } = req.body;
-  try {
-    const user = await User.findOne({ _id: userId });
-    if (!user) return res.status(400).json({ msg: "user does not exist" });
-    //check if user has already upgraded
-    if (user.isPartner)
-      return res.status(400).json({ msg: "You are already a partner" });
-    if (user.balance < 1000)
-      return res
-        .status(400)
-        .json({ msg: "Insufficient balance for this operation" });
-    //upgrade user to partner and deduct the amount
-    await User.updateOne(
-      { _id: userId },
-      {
-        $set: {
-          isPartner: true,
-          withdrawalDetails: {
-            bank,
-            bankCode,
-            accountNumber,
-            nameOnAccount,
-          },
-        },
-        $inc: { balance: -1000 },
-      }
-    );
-    //generate receipt
-    await generateReceipt({
-      transactionId: uuid(),
-      planNetwork: `upgrade to partnership package`,
-      planName: `₦ ${1000}`,
-      phoneNumber: user.userName,
-      status: "success",
-      amountToCharge: 1000,
-      balance: user.balance,
-      userId: user._id,
-      userName: user.userName,
-      type: "earning",
-      wavedAmount: 1000, //profit decreased
-    });
-    //send email
-    sendEmail(
-      user.email,
-      "Thanks for becoming a partner with us",
-      { name: user.fullName || user.userName, link: process.env.FRONTEND_URL },
-      "../templates/upgradeSuccess.handlebars"
-    );
-    //return response
-    res
-      .status(200)
-      .json({ msg: "You have successfully upgraded to a partner" });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ msg: "An error occur please contact an Admin" });
+    return res.status(500).json({ msg: "something went wrong" });
   }
 };
 const updateKyc = async (req, res) => {
   const { userId } = req.user;
   const { nin: ninNo, bvn: bvnNo } = req.body;
-  const { MONNIFY_API_URL, MONNIFY_API_ENCODED } = process.env;
+  const {
+    MONNIFY_API_URL,
+    // MONNIFY_API_ENCODED,
+    MONNIFY_API_KEY,
+    MONNIFY_API_SECRET,
+  } = process.env;
   if (!ninNo && !bvnNo) {
     return res.status(400).json({ msg: "Please provide Bvn/Nin" });
   }
@@ -1117,7 +833,7 @@ const updateKyc = async (req, res) => {
   if (bvn || nin)
     return res.status(400).json({ msg: "You have done your KYC before" });
   if (accountNumbers.length < 1) {
-    const response = await generateAccountNumber({
+    const response = await generateAcc({
       userName,
       email,
       bvn: bvnNo,
@@ -1127,15 +843,29 @@ const updateKyc = async (req, res) => {
     if (!response.status) {
       return res.status(400).json({ msg: response.msg });
     } else {
+      const kycDetails = {
+        fullName: response.msg,
+        bvn: bvnNo,
+        nin: ninNo,
+      };
+      // console.log("here");
+      const isUpdated = await User.updateOne(
+        { _id: userId },
+        { $set: { ...kycDetails } }
+      );
+      console.log({ isUpdated });
       return res.status(200).json({ msg: response.msg });
     }
   }
+  const ApiKeyEncoded = Buffer.from(
+    MONNIFY_API_KEY + ":" + MONNIFY_API_SECRET
+  ).toString("base64");
   const response = await axios.post(
     `${MONNIFY_API_URL}/api/v1/auth/login`,
     {},
     {
       headers: {
-        Authorization: `Basic ${MONNIFY_API_ENCODED}`,
+        Authorization: `Basic ${ApiKeyEncoded}`,
       },
     }
   );
@@ -1196,70 +926,9 @@ const updateKyc = async (req, res) => {
     return res.status(500).json({ msg: responseObject.msg });
   }
 };
-const networkStatus = async (req, res) => {
-  try {
-    const checkStatus = async (network, type) => {
-      let percentageSuccess = 0;
-      let serviceToCheck = network + "-" + type;
-      const serviceToCheckDict = {
-        "MTN-SME": "MTN",
-        "9MOBILE-SME": "9MOBILE",
-        "GLO-CG": "GLO",
-        "AIRTEL-CG": "AIRTEL",
-      };
-      const isServiceAvailable = await servicesModel.findOne({
-        serviceName: serviceToCheckDict[serviceToCheck] || serviceToCheck,
-        serviceType: "data",
-      });
-      // console.log(isServiceAvailable);
-      let networkName = network + " " + type;
-      const allTrans = await Transaction.find({
-        createdAt: {
-          $gte: new Date().setHours(-1, -1, -1, -1),
-          $lt: new Date().setHours(23, 59, 59, 999),
-        },
-        trans_Network: { $regex: networkName, $options: "i" },
-        // trans_Status: "failed",
-        trans_Type: "data",
-      })
-        .sort("-createdAt")
-        .limit(300);
-      // .countDocuments();
-      const failedTrans = allTrans.filter(
-        (e) => e.trans_Status == "failed"
-      ).length;
-      // console.log({ failedTrans, allTrans: allTrans.length });
-      percentageSuccess =
-        (1 - failedTrans / (networkName == "MTN SME" ? 600 : 300)) * 100 || 0;
-      return {
-        name: `${network + "-" + type}${
-          !isServiceAvailable.isAvailable ? " LOCKED!!!" : ""
-        }`,
-        value: parseInt(percentageSuccess),
-      };
-    };
-
-    const status = [
-      await checkStatus("MTN", "SME"),
-      await checkStatus("MTN", "SME2"),
-      await checkStatus("MTN", "CG"),
-      await checkStatus("MTN", "DATA_TRANSFER"),
-      await checkStatus("MTN", "COUPON"),
-      await checkStatus("GLO", "CG"),
-      await checkStatus("AIRTEL", "CG"),
-      await checkStatus("9MOBILE", "SME"),
-    ];
-    res.status(200).json(status);
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ msg: "Something went wrong" });
-  }
-};
-
 module.exports = {
   register,
   login,
-  fetchUser,
   updateUser,
   deleteUser,
   validateToken,
@@ -1271,15 +940,10 @@ module.exports = {
   transferFund,
   changePassword,
   validateUser,
-  generateVpay,
-  updateWebhookUrl,
-  fetchContact,
   addContact,
-  updateContact,
   deleteContact,
-  fetchReferral,
-  upgradeToPartner,
-  withdrawEarning,
+  fetchContact,
+  updateContact,
+  updateWebhookUrl,
   updateKyc,
-  networkStatus,
 };

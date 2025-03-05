@@ -11,7 +11,7 @@ const sendEmail = async (email, subject, payload, template) => {
       port: 465,
       auth: {
         user: process.env.EMAIL_USERNAME,
-        pass: process.env.EMAIL_PASSWORD, // naturally, replace both with your real credentials or an application-specific password
+        pass: process.env.EMAIL_PASSWORD,
       },
     });
 

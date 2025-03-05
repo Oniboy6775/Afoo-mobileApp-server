@@ -1,29 +1,14 @@
 const axios = require("axios");
 
-const buyElectricity = async ({
-  meterId,
-  amount,
-  meterNumber,
-  address,
-  meterOwner,
-  meterType,
-}) => {
+const buyElectricity = async (payload) => {
   // return { status: true, msg: "successful purchase token" };
   try {
     const BuyDataResponse = await axios.post(
-      `${process.env.GLADITINGSDATA_API}/billpayment/`,
-      {
-        disco_name: meterId,
-        amount,
-        Customer_Phone: "08108135121",
-        meter_number: meterNumber,
-        MeterType: meterType === "prepaid" ? "Prepaid" : "Postpaid",
-        customer_address: address,
-        customer_name: meterOwner,
-      },
+      `${process.env.DATARELOADED_API}/buy/electricity`,
+      payload,
       {
         headers: {
-          Authorization: process.env.GLADITINGSDATA_TOKEN,
+          Authorization: process.env.DATARELOADED_API_KEY,
         },
       }
     );
