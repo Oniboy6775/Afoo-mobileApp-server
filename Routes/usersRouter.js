@@ -21,6 +21,7 @@ const {
   deleteContact,
   updateWebhookUrl,
   updateKyc,
+  upgradeUser,
   // fetchReferral,
   // withdrawEarning,
 } = require("../Controllers/userControllers");
@@ -39,12 +40,13 @@ router
 // router.get("/referral", auth, fetchReferral);
 // router.post("/withdrawEarning", auth, withdrawEarning);
 router.route("/user/:id").patch(auth, updateUser).delete(auth, deleteUser);
+router.route("/user/upgrade/:id").patch(auth, upgradeUser);
+
 router.post("/requestPasswordReset", requestPasswordReset);
 router.post("/resetpassword", resetPassword);
 router.post("/requestPinReset", auth, requestPinReset);
 router.post("/resetpin", resetPin);
 router.post("/istokenValid", validateToken);
-router.post("/transferFund", auth, transferFund);
 router.post("/changePassword", auth, changePassword);
 router.get("/validateUser/:userName", auth, validateUser);
 router.post("/updateWebhook", auth, updateWebhookUrl);

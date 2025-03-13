@@ -14,6 +14,7 @@ const {
   getNotification,
   updateNotification,
   upgradeUser,
+  transferFund,
 } = require("../Controllers/adminController");
 const isAdmin = require("../Middleware/isAdmin");
 
@@ -30,5 +31,7 @@ router.post("/sendMail/:id", auth, sendMail);
 router.post("/refund/:id", auth, refund);
 router.get("/notification", auth, getNotification);
 router.post("/notification", auth, updateNotification);
+
+router.post("/transferFund", auth, transferFund);
 
 module.exports = router;

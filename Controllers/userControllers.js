@@ -353,7 +353,90 @@ const updateUser = async (req, res) => {
       .status(401)
       .json({ msg: "You are not allowed to update this user" });
   // if (req.body.userType && req.body.userType !== "reseller") {
-  const resellerAmount = 1000;
+
+  // const resellerAmount = 1000;
+  // Get the upgradedAmount from the settings
+  const { upgradeAmount: resellerAmount } = await Settings.findOne();
+
+  if (
+    resellerAmount === undefined ||
+    resellerAmount === null ||
+    resellerAmount === 0
+  )
+    return res.status(400).json({ msg: "upgrade amount not set" });
+  // console.log(resellerAmount);
+  const user = await User.findOne({ _id: userId });
+  // console.log(user);
+  if (user.userType === req.body.userType)
+    return res.status(400).json({ msg: "You are already a reseller" });
+  if (user.balance < resellerAmount)
+    return res.status(400).json({ msg: "Insufficient balance" });
+  // console.log("here");
+  await User.updateOne(
+    { _id: userId },
+    {
+      $inc: {
+        balance: -resellerAmount,
+      },
+    }
+  );
+  const upgradeTransaction = Transaction({
+    trans_Id: uuid(),
+    trans_By: userId,
+    trans_Type: "wallet",
+    trans_Network: "upgrade",
+    phone_number: `upgrade to ${req.body.userType}`,
+    trans_amount: resellerAmount,
+    balance_Before: user.balance,
+    balance_After: user.balance - resellerAmount,
+    trans_Date: `${new Date().toDateString()} ${new Date().toLocaleTimeString()}`,
+    trans_Status: "success",
+    createdAt: Date.now(),
+  });
+
+  await upgradeTransaction.save();
+  await User.updateOne(
+    { _id: userId },
+    { ...req.body },
+    { runValidators: true }
+  );
+
+  res.status(200).json({ msg: "user updated successfully" });
+  if (user.referredBy) {
+    const referralBonus = 500;
+    const referrer = await User.findOne({ userName: user.referredBy });
+    if (!referrer) return;
+    await BONUS_RECEIPT({ referrer, user, referralBonus });
+    await User.updateOne(
+      { _id: referrer._id },
+      { $inc: { balance: referralBonus } }
+    );
+  }
+  return;
+};
+const upgradeUser = async (req, res) => {
+  const {
+    user: { userId },
+    params: { id },
+  } = req;
+  if (id !== userId)
+    return res
+      .status(401)
+      .json({ msg: "You are not allowed to update this user" });
+  // if (req.body.userType && req.body.userType !== "reseller") {
+
+  // const resellerAmount = 1000;
+
+  // Get the upgradedAmount from the settings
+  const { resellerUserUpgradeAmount: resellerAmount } =
+    await Settings.findOne();
+
+  if (
+    resellerAmount === undefined ||
+    resellerAmount === null ||
+    resellerAmount === 0
+  )
+    return res.status(400).json({ msg: "upgrade amount not set" });
   // console.log(resellerAmount);
   const user = await User.findOne({ _id: userId });
   // console.log(user);
@@ -606,78 +689,7 @@ const resetPin = async (req, res) => {
     res.status(500).json({ msg: "An error occcured" });
   }
 };
-const transferFund = async (req, res) => {
-  // res.status(200).json({msg:"tranfer successful"})
-  const { userName, amount, userPin } = req.body;
-  const { userId } = req.user;
 
-  const sender = await User.findById(userId);
-  const { balance } = sender;
-  let receiver = await User.findOne({ userName: userName });
-  if (!receiver) receiver = await User.findOne({ email: userName });
-  if (!userName || !amount)
-    return res.status(400).json({ msg: "All fields are required " });
-  if (!receiver)
-    return res
-      .status(400)
-      .json({ msg: "No account with the username provided " });
-
-  if (userId !== process.env.ADMIN_ID)
-    return res.status(400).json({ msg: "Only admin can access this route" });
-  if (
-    amount < 500 &&
-    userId !== process.env.ADMIN_ID &&
-    userId !== process.env.COUPON_VENDOR_FAIZ &&
-    userId !== process.env.COUPON_VENDOR_YUSUF
-  )
-    return res.status(400).json({ msg: "Minimum transfer is ₦500" });
-  if (userName === sender.userName)
-    return res.status(400).json({ msg: "You cannot transfer to yourself" });
-  if (balance < amount)
-    return res
-      .status(400)
-      .json({ msg: "You cannot transfer more than your balance" });
-  try {
-    // Transfer transaction
-
-    const senderResponse = await TRANSFER_RECEIPT({
-      isSender: true,
-      receiver,
-      amount,
-      balance,
-      userId,
-    });
-    if (senderResponse) {
-      // Remove amount from sender balance
-      console.log("before");
-      await User.updateOne({ _id: userId }, { $inc: { balance: -amount } });
-      console.log("after");
-    }
-    const receiverResponse = await TRANSFER_RECEIPT({
-      isSender: false,
-      sender,
-      amount,
-      receiver,
-    });
-    if (receiverResponse) {
-      // add amount to receiver balance
-      await User.updateOne(
-        { userName: userName },
-        { $inc: { balance: amount } }
-      );
-    }
-
-    return res.status(200).json({
-      msg: `You have successfully transfer ₦${amount} to ${userName}`,
-      amount: amount,
-      receipt: senderResponse,
-    });
-  } catch (error) {
-    // if error return the amount to sender
-
-    return res.status(500).json({ msg: error.message });
-  }
-};
 const changePassword = async (req, res) => {
   const { oldPassword, newPassword, newPasswordCheck } = req.body;
   const user = await User.findById(req.user.userId);
@@ -937,7 +949,6 @@ module.exports = {
   resetPassword,
   requestPinReset,
   resetPin,
-  transferFund,
   changePassword,
   validateUser,
   addContact,
@@ -946,4 +957,5 @@ module.exports = {
   updateContact,
   updateWebhookUrl,
   updateKyc,
+  upgradeUser,
 };

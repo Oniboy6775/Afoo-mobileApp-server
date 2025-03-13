@@ -7,7 +7,7 @@ const Services = require("../Models/services");
 const axios = require("axios");
 const voucher_codes = require("voucher-code-generator");
 const sendEmail = require("../Utils/sendMail");
-const { REFUND_RECEIPT } = require("./TransactionReceipt");
+const { REFUND_RECEIPT, TRANSFER_RECEIPT } = require("./TransactionReceipt");
 const dataModel = require("../Models/dataModel");
 const notification = require("../Models/notification");
 const CostPrice = require("../Models/costPriceModel");
@@ -360,6 +360,79 @@ const upgradeUser = async (req, res) => {
     res.status(500).json({ msg: "User upgrade failed" });
   }
 };
+
+const transferFund = async (req, res) => {
+  // res.status(200).json({msg:"tranfer successful"})
+  const { userName, amount, userPin } = req.body;
+  const { userId } = req.user;
+
+  const sender = await User.findById(userId);
+  const { balance } = sender;
+  let receiver = await User.findOne({ userName: userName });
+  if (!receiver) receiver = await User.findOne({ email: userName });
+  if (!userName || !amount)
+    return res.status(400).json({ msg: "All fields are required " });
+  if (!receiver)
+    return res
+      .status(400)
+      .json({ msg: "No account with the username provided " });
+
+  if (userId !== process.env.ADMIN_ID)
+    return res.status(400).json({ msg: "Only admin can access this route" });
+  if (
+    amount < 500 &&
+    userId !== process.env.ADMIN_ID &&
+    userId !== process.env.COUPON_VENDOR_FAIZ &&
+    userId !== process.env.COUPON_VENDOR_YUSUF
+  )
+    return res.status(400).json({ msg: "Minimum transfer is ₦500" });
+  if (userName === sender.userName)
+    return res.status(400).json({ msg: "You cannot transfer to yourself" });
+  if (balance < amount)
+    return res
+      .status(400)
+      .json({ msg: "You cannot transfer more than your balance" });
+  try {
+    // Transfer transaction
+
+    const senderResponse = await TRANSFER_RECEIPT({
+      isSender: true,
+      receiver,
+      amount,
+      balance,
+      userId,
+    });
+    if (senderResponse) {
+      // Remove amount from sender balance
+      console.log("before");
+      await User.updateOne({ _id: userId }, { $inc: { balance: -amount } });
+      console.log("after");
+    }
+    const receiverResponse = await TRANSFER_RECEIPT({
+      isSender: false,
+      sender,
+      amount,
+      receiver,
+    });
+    if (receiverResponse) {
+      // add amount to receiver balance
+      await User.updateOne(
+        { userName: userName },
+        { $inc: { balance: amount } }
+      );
+    }
+
+    return res.status(200).json({
+      msg: `You have successfully transfer ₦${amount} to ${userName}`,
+      amount: amount,
+      receipt: senderResponse,
+    });
+  } catch (error) {
+    // if error return the amount to sender
+
+    return res.status(500).json({ msg: error.message });
+  }
+};
 module.exports = {
   adminDetails,
   generateCoupon,
@@ -373,4 +446,5 @@ module.exports = {
   updateNotification,
   getNotification,
   upgradeUser,
+  transferFund,
 };
