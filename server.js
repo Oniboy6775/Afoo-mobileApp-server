@@ -55,6 +55,34 @@ app.get("/api/v1/prices", async (req, res) => {
   }
 });
 
+app.all("/api/v1/prices", async (req, res) => {
+  const { network, category } = req.body;
+  const token = req.header("x-auth-token");
+  let isAdmin = false;
+  if (token) {
+    const verified = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = verified;
+    isAdmin = req.user.userId === process.env.ADMIN_ID;
+  }
+  try {
+    let queryObj = {};
+    if (network) {
+      queryObj.plan_network = network;
+    }
+    if (category && category !== "all") {
+      queryObj.planCategory = category;
+    }
+    let dataList = DataModel.find(queryObj);
+    if (!isAdmin)
+      dataList.select(
+        "-planCostPrice -volumeRatio -partnerPrice -planSupplier"
+      );
+    dataList = await dataList;
+    return res.status(200).json(dataList);
+  } catch (e) {
+    return res.status(500).json({ msg: "An error occur" });
+  }
+});
 // if (process.env.NODE_ENV !== "production") {
 app.use(morgan("dev"));
 // }
