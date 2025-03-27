@@ -14,6 +14,8 @@ const BUYAIRTIME = require("./APICALLS/Airtime/buyAirtime");
 const BUYDATA = require("./APICALLS/Data/Data");
 const { default: axios } = require("axios");
 const { disco } = require("../API_DATA/disco");
+const getStatusCode = require("../Utils/statusCodeMapping");
+
 const buyAirtime = async (req, res) => {
   const {
     user: { userId, userType },
@@ -166,6 +168,27 @@ const buyData = async (req, res) => {
   }
 };
 
+// Data Subscription Plans
+const dataPlans = async (req, res) => {
+  const { network } = req.params;
+  let NETWORK = "";
+  if (network == "1") NETWORK = "MTN";
+  if (network == "2") NETWORK = "GLO";
+  if (network == "3") NETWORK = "AIRTEL";
+  if (network == "4") NETWORK = "9MOBILE";
+  try {
+    if (!network)
+      return res.status(400).json({ msg: "All fields are required" });
+    const data = await Data.find({ plan_network: NETWORK });
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      data,
+    });
+  } catch (error) {
+    res.status(500).json({ msg: "An error occur" });
+  }
+};
 const validateMeter = async (req, res) => {
   const { meterNumber, meterId, meterType } = req.body;
   console.log({ ...req.body });
@@ -251,4 +274,5 @@ module.exports = {
   buyCableTv,
   validateCableTv,
   validateMeter,
+  dataPlans,
 };
