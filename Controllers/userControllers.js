@@ -47,29 +47,131 @@ const register = async (req, res) => {
       .status(400)
       .json({ msg: "Enter the same password twice for verification." });
 
-  const existingUserEmail = await User.findOne({ email: email });
-  if (existingUserEmail)
-    return res
-      .status(400)
-      .json({ msg: "An account with this email already exists." });
-  const existingUsername = await User.findOne({ userName: userName });
-  if (existingUsername)
-    return res.status(400).json({ msg: "This username has been taken" });
-  // generate API token for the user
-  req.body.apiToken = randomToken.generate(30);
   try {
-    await User.create({ ...req.body });
+    const existingUserEmail = await User.findOne({ email: email });
+
+    if (existingUserEmail)
+      return res
+        .status(400)
+        .json({ msg: "An account with this email already exists." });
+    const existingUsername = await User.findOne({ userName: userName });
+    if (existingUsername)
+      return res.status(400).json({ msg: "This username has been taken" });
+    // generate API token for the user
+
+    // If user does not exist
+    if (!existingUserEmail && !existingUsername) {
+      req.body.apiToken = randomToken.generate(30);
+
+      await User.create({ ...req.body });
+
+      // generate account number
+      await generateAcc({ userName, email });
+      const user = await User.findOne({ email });
+      const token = user.createJWT();
+      const allDataList = await Data.find();
+
+      const MTN_SME_PRICE = allDataList
+        .filter((e) => e.plan_network === "MTN")
+        .map((e) => {
+          const { my_price, id } = e;
+          let price = my_price;
+
+          e["plan_amount"] = price;
+          return e;
+        });
+
+      const GLO_PRICE = allDataList
+        .filter((e) => e.plan_network === "GLO")
+        .map((e) => {
+          const { my_price } = e;
+          let price = my_price;
+
+          e["plan_amount"] = price;
+          return e;
+        });
+      const AIRTEL_PRICE = allDataList
+        .filter((e) => e.plan_network === "AIRTEL")
+        .map((e) => {
+          const { my_price } = e;
+          let price = my_price;
+
+          e["plan_amount"] = price;
+          return e;
+        });
+      const NMOBILE_PRICE = allDataList
+        .filter((e) => e.plan_network === "9MOBILE")
+        .map((e) => {
+          const { my_price } = e;
+          let price = my_price;
+
+          e["plan_amount"] = price;
+          return e;
+        });
+      const CABLETV = await cabletvModel.find({});
+
+      if (referredBy) await newReferral(req.body);
+      return res.status(200).json({
+        newUser: user,
+        user,
+        token,
+        transactions: [],
+        isAdmin: user._id === process.env.ADMIN_ID ? true : false,
+
+        // Subscription plans removed from payload --- request of the frontend team (26/03/2025)
+        // subscriptionPlans: {
+        //   MTN: MTN_SME_PRICE,
+        //   GLO: GLO_PRICE,
+        //   AIRTEL: AIRTEL_PRICE,
+        //   NMOBILE: NMOBILE_PRICE,
+        //   CABLETV: CABLETV,
+        //   CABLENAME: cableName,
+        //   DISCO: disco,
+        //   NETWORK: network,
+        // },
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({ msg: error.message });
+  }
+};
+const login = async (req, res) => {
+  const { userName, password } = req.body;
+
+  try {
+    if (!userName || !password)
+      return res.status(400).json({ msg: "Not all fields have been entered." });
+    let user = await User.findOne({ userName: userName });
+    if (!user) user = await User.findOne({ email: userName });
+    if (!user)
+      return res
+        .status(400)
+        .json({ msg: "No account with this detail has been registered." });
+    const isPasswordCorrect = await user.comparePassword(password);
+    if (!isPasswordCorrect)
+      return res.status(400).json({ msg: "Incorrect password" });
     // generate account number
-    await generateAcc({ userName, email });
-    const user = await User.findOne({ email });
+    // if (user.accountNumbers.length < 1)
+    // await generateAcc({ userName, email: user.email });
+
     const token = user.createJWT();
+    const isReseller = user.userType === "reseller";
+    const isApiUser = user.userType === "api user";
+
+    const userTransaction = await Transaction.find({ trans_By: user._id })
+      .limit(100)
+      .sort("-createdAt");
     const allDataList = await Data.find();
+
     const MTN_SME_PRICE = allDataList
       .filter((e) => e.plan_network === "MTN")
       .map((e) => {
-        const { my_price, id } = e;
+        const { resellerPrice, my_price, id } = e;
         let price = my_price;
 
+        if (isReseller || isApiUser) {
+          price = resellerPrice;
+        }
         e["plan_amount"] = price;
         return e;
       });
@@ -77,174 +179,88 @@ const register = async (req, res) => {
     const GLO_PRICE = allDataList
       .filter((e) => e.plan_network === "GLO")
       .map((e) => {
-        const { my_price } = e;
+        const { my_price, resellerPrice } = e;
         let price = my_price;
 
+        if (isReseller || isApiUser) {
+          price = resellerPrice;
+        }
         e["plan_amount"] = price;
         return e;
       });
     const AIRTEL_PRICE = allDataList
       .filter((e) => e.plan_network === "AIRTEL")
       .map((e) => {
-        const { my_price } = e;
+        const { my_price, resellerPrice } = e;
         let price = my_price;
 
+        if (isReseller || isApiUser) {
+          price = resellerPrice;
+        }
         e["plan_amount"] = price;
         return e;
       });
     const NMOBILE_PRICE = allDataList
       .filter((e) => e.plan_network === "9MOBILE")
       .map((e) => {
-        const { my_price } = e;
+        const { my_price, resellerPrice } = e;
         let price = my_price;
 
+        if (isReseller || isApiUser) {
+          price = resellerPrice;
+        }
         e["plan_amount"] = price;
         return e;
       });
     const CABLETV = await cabletvModel.find({});
-    res.status(200).json({
-      newUser: user,
-      user,
-      token,
-      transactions: [],
-      isAdmin: user._id === process.env.ADMIN_ID ? true : false,
-      subscriptionPlans: {
-        MTN: MTN_SME_PRICE,
-        GLO: GLO_PRICE,
-        AIRTEL: AIRTEL_PRICE,
-        NMOBILE: NMOBILE_PRICE,
-        CABLETV: CABLETV,
-        CABLENAME: cableName,
-        DISCO: disco,
-        NETWORK: network,
-      },
-    });
-    if (referredBy) newReferral(req.body);
+    if (!user.apiToken) {
+      const generatedRandomToken = randomToken.generate(30);
+      console.log(generatedRandomToken);
+      await User.updateOne(
+        { email: user.email },
+        { $set: { apiToken: generatedRandomToken } },
+        { new: true, runValidators: true }
+      );
+      user.apiToken === generatedRandomToken;
+    }
 
-    return;
+    return res.status(200).json({
+      token: token,
+      // user: {
+      //   userName: user.userName,
+      //   fullName: user.userName,
+      //   email: user.email,
+      //   balance: user.balance,
+      //   apiToken: user.apiToken,
+      //   reservedAccountNo: user.reservedAccountNo,
+      //   reservedAccountBank: user.reservedAccountBank,
+      //   reservedAccountNo2: user.reservedAccountNo2,
+      //   reservedAccountBank2: user.reservedAccountBank2,
+      // },
+      user,
+      transactions: userTransaction,
+      isAdmin: user._id === process.env.ADMIN_ID ? true : false,
+      isCouponVendor:
+        user._id === process.env.COUPON_VENDOR_FAIZ ||
+        user._id === process.env.COUPON_VENDOR_YUSUF
+          ? true
+          : false,
+      // Subscription plans removed from payload --- request of the frontend team (26/03/2025)
+      // subscriptionPlans: {
+      //   MTN: MTN_SME_PRICE,
+      //   GLO: GLO_PRICE,
+      //   AIRTEL: AIRTEL_PRICE,
+      //   NMOBILE: NMOBILE_PRICE,
+      //   CABLETV: CABLETV,
+      //   CABLENAME: cableName,
+      //   DISCO: disco,
+      //   NETWORK: network,
+      // },
+    });
   } catch (error) {
+    console.log(error);
     return res.status(500).json({ msg: error.message });
   }
-};
-const login = async (req, res) => {
-  const { userName, password } = req.body;
-  if (!userName || !password)
-    return res.status(400).json({ msg: "Not all fields have been entered." });
-  let user = await User.findOne({ userName: userName });
-  if (!user) user = await User.findOne({ email: userName });
-  if (!user)
-    return res
-      .status(400)
-      .json({ msg: "No account with this detail has been registered." });
-  const isPasswordCorrect = await user.comparePassword(password);
-  if (!isPasswordCorrect)
-    return res.status(400).json({ msg: "Incorrect password" });
-  // generate account number
-  // if (user.accountNumbers.length < 1)
-  // await generateAcc({ userName, email: user.email });
-
-  const token = user.createJWT();
-  const isReseller = user.userType === "reseller";
-  const isApiUser = user.userType === "api user";
-
-  const userTransaction = await Transaction.find({ trans_By: user._id })
-    .limit(100)
-    .sort("-createdAt");
-  const allDataList = await Data.find();
-
-  const MTN_SME_PRICE = allDataList
-    .filter((e) => e.plan_network === "MTN")
-    .map((e) => {
-      const { resellerPrice, my_price, id } = e;
-      let price = my_price;
-
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
-    });
-
-  const GLO_PRICE = allDataList
-    .filter((e) => e.plan_network === "GLO")
-    .map((e) => {
-      const { my_price, resellerPrice } = e;
-      let price = my_price;
-
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
-    });
-  const AIRTEL_PRICE = allDataList
-    .filter((e) => e.plan_network === "AIRTEL")
-    .map((e) => {
-      const { my_price, resellerPrice } = e;
-      let price = my_price;
-
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
-    });
-  const NMOBILE_PRICE = allDataList
-    .filter((e) => e.plan_network === "9MOBILE")
-    .map((e) => {
-      const { my_price, resellerPrice } = e;
-      let price = my_price;
-
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
-    });
-  const CABLETV = await cabletvModel.find({});
-  if (!user.apiToken) {
-    const generatedRandomToken = randomToken.generate(30);
-    console.log(generatedRandomToken);
-    await User.updateOne(
-      { email: user.email },
-      { $set: { apiToken: generatedRandomToken } },
-      { new: true, runValidators: true }
-    );
-    user.apiToken === generatedRandomToken;
-  }
-
-  return res.status(200).json({
-    token: token,
-    // user: {
-    //   userName: user.userName,
-    //   fullName: user.userName,
-    //   email: user.email,
-    //   balance: user.balance,
-    //   apiToken: user.apiToken,
-    //   reservedAccountNo: user.reservedAccountNo,
-    //   reservedAccountBank: user.reservedAccountBank,
-    //   reservedAccountNo2: user.reservedAccountNo2,
-    //   reservedAccountBank2: user.reservedAccountBank2,
-    // },
-    user,
-    transactions: userTransaction,
-    isAdmin: user._id === process.env.ADMIN_ID ? true : false,
-    isCouponVendor:
-      user._id === process.env.COUPON_VENDOR_FAIZ ||
-      user._id === process.env.COUPON_VENDOR_YUSUF
-        ? true
-        : false,
-    subscriptionPlans: {
-      MTN: MTN_SME_PRICE,
-      GLO: GLO_PRICE,
-      AIRTEL: AIRTEL_PRICE,
-      NMOBILE: NMOBILE_PRICE,
-      CABLETV: CABLETV,
-      CABLENAME: cableName,
-      DISCO: disco,
-      NETWORK: network,
-    },
-  });
 };
 
 const userData = async (req, res) => {
@@ -561,6 +577,8 @@ const requestPasswordReset = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+
+    res.status(500).json({ msg: "An error occcured" });
   }
 };
 const resetPassword = async (req, res) => {
@@ -603,6 +621,7 @@ const resetPassword = async (req, res) => {
       .json({ msg: "You have successfully reset your password" });
   } catch (error) {
     console.log(error);
+    res.status(500).json({ msg: "An error occcured" });
   }
 };
 const requestPinReset = async (req, res) => {

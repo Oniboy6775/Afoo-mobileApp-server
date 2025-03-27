@@ -10,7 +10,6 @@ const {
   resetPassword,
   requestPinReset,
   resetPin,
-  transferFund,
   changePassword,
   validateUser,
   // generateVpay,
@@ -44,10 +43,12 @@ router.route("/user/upgrade/:id").patch(auth, upgradeUser);
 
 router.post("/requestPasswordReset", requestPasswordReset);
 router.post("/resetpassword", resetPassword);
+router.post("/changePassword", auth, changePassword);
+
+// ------These endpoint are for what?
 router.post("/requestPinReset", auth, requestPinReset);
 router.post("/resetpin", resetPin);
 router.post("/istokenValid", validateToken);
-router.post("/changePassword", auth, changePassword);
 router.get("/validateUser/:userName", auth, validateUser);
 router.post("/updateWebhook", auth, updateWebhookUrl);
 router.post("/updateKyc", auth, updateKyc);
