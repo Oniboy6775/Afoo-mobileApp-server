@@ -26,6 +26,7 @@ const { MTN_CG, MTN_SME } = require("../API_DATA/newData");
 // const generateVpayAcc = require("../Utils/generateVpayAccount");
 const generateAcc = require("../Utils/accountNumbers");
 const { default: axios } = require("axios");
+const getStatusCode = require("../Utils/statusCodeMapping");
 
 const register = async (req, res) => {
   let { email, password, passwordCheck, userName, referredBy, phoneNumber } =
@@ -63,76 +64,96 @@ const register = async (req, res) => {
     if (!existingUserEmail && !existingUsername) {
       req.body.apiToken = randomToken.generate(30);
 
-      await User.create({ ...req.body });
-
       // generate account number
-      await generateAcc({ userName, email });
-      const user = await User.findOne({ email });
-      const token = user.createJWT();
-      const allDataList = await Data.find();
-
-      const MTN_SME_PRICE = allDataList
-        .filter((e) => e.plan_network === "MTN")
-        .map((e) => {
-          const { my_price, id } = e;
-          let price = my_price;
-
-          e["plan_amount"] = price;
-          return e;
-        });
-
-      const GLO_PRICE = allDataList
-        .filter((e) => e.plan_network === "GLO")
-        .map((e) => {
-          const { my_price } = e;
-          let price = my_price;
-
-          e["plan_amount"] = price;
-          return e;
-        });
-      const AIRTEL_PRICE = allDataList
-        .filter((e) => e.plan_network === "AIRTEL")
-        .map((e) => {
-          const { my_price } = e;
-          let price = my_price;
-
-          e["plan_amount"] = price;
-          return e;
-        });
-      const NMOBILE_PRICE = allDataList
-        .filter((e) => e.plan_network === "9MOBILE")
-        .map((e) => {
-          const { my_price } = e;
-          let price = my_price;
-
-          e["plan_amount"] = price;
-          return e;
-        });
-      const CABLETV = await cabletvModel.find({});
+      // await generateAcc({ userName, email });
 
       if (referredBy) await newReferral(req.body);
-      return res.status(200).json({
-        newUser: user,
-        user,
-        token,
-        transactions: [],
-        isAdmin: user._id === process.env.ADMIN_ID ? true : false,
 
-        // Subscription plans removed from payload --- request of the frontend team (26/03/2025)
-        // subscriptionPlans: {
-        //   MTN: MTN_SME_PRICE,
-        //   GLO: GLO_PRICE,
-        //   AIRTEL: AIRTEL_PRICE,
-        //   NMOBILE: NMOBILE_PRICE,
-        //   CABLETV: CABLETV,
-        //   CABLENAME: cableName,
-        //   DISCO: disco,
-        //   NETWORK: network,
-        // },
+      // Create user
+      const user = await User.create({ ...req.body });
+
+      // Create JWT
+      const token = user.createJWT();
+
+      return res.status(200).json({
+        status: res.statusCode,
+        status_code: getStatusCode(res.statusCode),
+        token: token,
+        data: { ...user._doc },
+        msg: "User registered successfully",
       });
+
+      // const user = await User.findOne({ email });
+
+      // const allDataList = await Data.find();
+
+      // const MTN_SME_PRICE = allDataList
+      //   .filter((e) => e.plan_network === "MTN")
+      //   .map((e) => {
+      //     const { my_price, id } = e;
+      //     let price = my_price;
+
+      //     e["plan_amount"] = price;
+      //     return e;
+      //   });
+
+      // const GLO_PRICE = allDataList
+      //   .filter((e) => e.plan_network === "GLO")
+      //   .map((e) => {
+      //     const { my_price } = e;
+      //     let price = my_price;
+
+      //     e["plan_amount"] = price;
+      //     return e;
+      //   });
+      // const AIRTEL_PRICE = allDataList
+      //   .filter((e) => e.plan_network === "AIRTEL")
+      //   .map((e) => {
+      //     const { my_price } = e;
+      //     let price = my_price;
+
+      //     e["plan_amount"] = price;
+      //     return e;
+      //   });
+      // const NMOBILE_PRICE = allDataList
+      //   .filter((e) => e.plan_network === "9MOBILE")
+      //   .map((e) => {
+      //     const { my_price } = e;
+      //     let price = my_price;
+
+      //     e["plan_amount"] = price;
+      //     return e;
+      //   });
+      // const CABLETV = await cabletvModel.find({});
+
+      // return res.status(200).json({
+      //   newUser: user,
+      //   user,
+      //   token,
+      //   transactions: [],
+      //   isAdmin: user._id === process.env.ADMIN_ID ? true : false,
+
+      // Subscription plans removed from payload --- request of the frontend team (26/03/2025)
+      // subscriptionPlans: {
+      //   MTN: MTN_SME_PRICE,
+      //   GLO: GLO_PRICE,
+      //   AIRTEL: AIRTEL_PRICE,
+      //   NMOBILE: NMOBILE_PRICE,
+      //   CABLETV: CABLETV,
+      //   CABLENAME: cableName,
+      //   DISCO: disco,
+      //   NETWORK: network,
+      // },
+      // });
     }
   } catch (error) {
-    return res.status(500).json({ msg: error.message });
+    console.log(error);
+    return res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      error: error.message,
+      msg: error.message,
+    });
   }
 };
 const login = async (req, res) => {
@@ -155,64 +176,7 @@ const login = async (req, res) => {
     // await generateAcc({ userName, email: user.email });
 
     const token = user.createJWT();
-    const isReseller = user.userType === "reseller";
-    const isApiUser = user.userType === "api user";
 
-    const userTransaction = await Transaction.find({ trans_By: user._id })
-      .limit(100)
-      .sort("-createdAt");
-    const allDataList = await Data.find();
-
-    const MTN_SME_PRICE = allDataList
-      .filter((e) => e.plan_network === "MTN")
-      .map((e) => {
-        const { resellerPrice, my_price, id } = e;
-        let price = my_price;
-
-        if (isReseller || isApiUser) {
-          price = resellerPrice;
-        }
-        e["plan_amount"] = price;
-        return e;
-      });
-
-    const GLO_PRICE = allDataList
-      .filter((e) => e.plan_network === "GLO")
-      .map((e) => {
-        const { my_price, resellerPrice } = e;
-        let price = my_price;
-
-        if (isReseller || isApiUser) {
-          price = resellerPrice;
-        }
-        e["plan_amount"] = price;
-        return e;
-      });
-    const AIRTEL_PRICE = allDataList
-      .filter((e) => e.plan_network === "AIRTEL")
-      .map((e) => {
-        const { my_price, resellerPrice } = e;
-        let price = my_price;
-
-        if (isReseller || isApiUser) {
-          price = resellerPrice;
-        }
-        e["plan_amount"] = price;
-        return e;
-      });
-    const NMOBILE_PRICE = allDataList
-      .filter((e) => e.plan_network === "9MOBILE")
-      .map((e) => {
-        const { my_price, resellerPrice } = e;
-        let price = my_price;
-
-        if (isReseller || isApiUser) {
-          price = resellerPrice;
-        }
-        e["plan_amount"] = price;
-        return e;
-      });
-    const CABLETV = await cabletvModel.find({});
     if (!user.apiToken) {
       const generatedRandomToken = randomToken.generate(30);
       console.log(generatedRandomToken);
@@ -225,41 +189,115 @@ const login = async (req, res) => {
     }
 
     return res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
       token: token,
-      // user: {
-      //   userName: user.userName,
-      //   fullName: user.userName,
-      //   email: user.email,
-      //   balance: user.balance,
-      //   apiToken: user.apiToken,
-      //   reservedAccountNo: user.reservedAccountNo,
-      //   reservedAccountBank: user.reservedAccountBank,
-      //   reservedAccountNo2: user.reservedAccountNo2,
-      //   reservedAccountBank2: user.reservedAccountBank2,
-      // },
-      user,
-      transactions: userTransaction,
-      isAdmin: user._id === process.env.ADMIN_ID ? true : false,
-      isCouponVendor:
-        user._id === process.env.COUPON_VENDOR_FAIZ ||
-        user._id === process.env.COUPON_VENDOR_YUSUF
-          ? true
-          : false,
-      // Subscription plans removed from payload --- request of the frontend team (26/03/2025)
-      // subscriptionPlans: {
-      //   MTN: MTN_SME_PRICE,
-      //   GLO: GLO_PRICE,
-      //   AIRTEL: AIRTEL_PRICE,
-      //   NMOBILE: NMOBILE_PRICE,
-      //   CABLETV: CABLETV,
-      //   CABLENAME: cableName,
-      //   DISCO: disco,
-      //   NETWORK: network,
-      // },
+      data: { ...user._doc },
+      msg: "Login successful",
     });
+    // const isReseller = user.userType === "reseller";
+    // const isApiUser = user.userType === "api user";
+
+    // const userTransaction = await Transaction.find({ trans_By: user._id })
+    //   .limit(100)
+    //   .sort("-createdAt");
+    // const allDataList = await Data.find();
+
+    // const MTN_SME_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "MTN")
+    //   .map((e) => {
+    //     const { resellerPrice, my_price, id } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+
+    // const GLO_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "GLO")
+    //   .map((e) => {
+    //     const { my_price, resellerPrice } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+    // const AIRTEL_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "AIRTEL")
+    //   .map((e) => {
+    //     const { my_price, resellerPrice } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+    // const NMOBILE_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "9MOBILE")
+    //   .map((e) => {
+    //     const { my_price, resellerPrice } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+    // const CABLETV = await cabletvModel.find({});
+
+    // return res.status(200).json({
+    //   token: token,
+    // user: {
+    //   userName: user.userName,
+    //   fullName: user.userName,
+    //   email: user.email,
+    //   balance: user.balance,
+    //   apiToken: user.apiToken,
+    //   reservedAccountNo: user.reservedAccountNo,
+    //   reservedAccountBank: user.reservedAccountBank,
+    //   reservedAccountNo2: user.reservedAccountNo2,
+    //   reservedAccountBank2: user.reservedAccountBank2,
+    // },
+
+    // data: { ...user._doc },
+    // user,
+    // transactions: userTransaction,
+    // isAdmin: user._id === process.env.ADMIN_ID ? true : false,
+    // isCouponVendor:
+    //   user._id === process.env.COUPON_VENDOR_FAIZ ||
+    //   user._id === process.env.COUPON_VENDOR_YUSUF
+    //     ? true
+    //     : false,
+    // Subscription plans removed from payload --- request of the frontend team (26/03/2025)
+    // subscriptionPlans: {
+    //   MTN: MTN_SME_PRICE,
+    //   GLO: GLO_PRICE,
+    //   AIRTEL: AIRTEL_PRICE,
+    //   NMOBILE: NMOBILE_PRICE,
+    //   CABLETV: CABLETV,
+    //   CABLENAME: cableName,
+    //   DISCO: disco,
+    //   NETWORK: network,
+    // },
+    // });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ msg: error.message });
+    return res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      error: error.message,
+      msg: error.message,
+      msg: error.message,
+    });
   }
 };
 
@@ -268,95 +306,113 @@ const userData = async (req, res) => {
   const { userId, userType } = req.user;
   const isReseller = userType === "reseller";
   const isApiUser = userType === "api user";
-  let user = await User.findOne({ _id: userId });
-  // const data = await Data.find();
-  // console.log(data);
-  const userTransaction = await Transaction.find({ trans_By: userId })
-    .limit(10)
-    .sort("-createdAt");
-  const allDataList = await Data.find().sort("dataplan_id");
-  // const allDataList = MTN_SME;
 
-  const MTN_SME_PRICE = allDataList
-    .filter((e) => e.plan_network === "MTN")
-    .map((e) => {
-      const { resellerPrice, my_price, id } = e;
-      let price = my_price;
+  try {
+    console.log({ userId });
+    let user = await User.findOne({ _id: userId });
 
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      data: { ...user._doc },
+      msg: "User details fetched successfully",
     });
 
-  const GLO_PRICE = allDataList
-    .filter((e) => e.plan_network === "GLO")
-    .map((e) => {
-      const { my_price, resellerPrice } = e;
-      let price = my_price;
+    // const data = await Data.find();
+    // console.log(data);
+    // const userTransaction = await Transaction.find({ trans_By: userId })
+    //   .limit(10)
+    //   .sort("-createdAt");
+    // const allDataList = await Data.find().sort("dataplan_id");
+    // const allDataList = MTN_SME;
 
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
-    });
-  const AIRTEL_PRICE = allDataList
-    .filter((e) => e.plan_network === "AIRTEL")
-    .map((e) => {
-      const { my_price, resellerPrice } = e;
-      let price = my_price;
+    // const MTN_SME_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "MTN")
+    //   .map((e) => {
+    //     const { resellerPrice, my_price, id } = e;
+    //     let price = my_price;
 
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
-    });
-  const NMOBILE_PRICE = allDataList
-    .filter((e) => e.plan_network === "9MOBILE")
-    .map((e) => {
-      const { my_price, resellerPrice } = e;
-      let price = my_price;
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
 
-      if (isReseller || isApiUser) {
-        price = resellerPrice;
-      }
-      e["plan_amount"] = price;
-      return e;
+    // const GLO_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "GLO")
+    //   .map((e) => {
+    //     const { my_price, resellerPrice } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+    // const AIRTEL_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "AIRTEL")
+    //   .map((e) => {
+    //     const { my_price, resellerPrice } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+    // const NMOBILE_PRICE = allDataList
+    //   .filter((e) => e.plan_network === "9MOBILE")
+    //   .map((e) => {
+    //     const { my_price, resellerPrice } = e;
+    //     let price = my_price;
+
+    //     if (isReseller || isApiUser) {
+    //       price = resellerPrice;
+    //     }
+    //     e["plan_amount"] = price;
+    //     return e;
+    //   });
+    // const CABLETV = await cabletvModel.find({});
+    // if (user.apiToken === undefined) {
+    //   const generatedRandomToken = randomToken.generate(30);
+    //   await User.updateOne(
+    //     { email: user.email },
+    //     { $set: { apiToken: generatedRandomToken } },
+    //     { new: true, runValidators: true }
+    //   );
+    //   user.apiToken === generatedRandomToken;
+    // }
+
+    // res.status(200).json({
+    //   user,
+    //   transactions: userTransaction,
+    //   isAdmin: userId === process.env.ADMIN_ID ? true : false,
+    //   isCouponVendor:
+    //     userId === process.env.COUPON_VENDOR_FAIZ ||
+    //     userId === process.env.COUPON_VENDOR_YUSUF
+    //       ? true
+    //       : false,
+    //   subscriptionPlans: {
+    //     MTN: MTN_SME_PRICE,
+    //     GLO: GLO_PRICE,
+    //     AIRTEL: AIRTEL_PRICE,
+    //     NMOBILE: NMOBILE_PRICE,
+    //     CABLETV: CABLETV,
+    //     CABLENAME: cableName,
+    //     DISCO: disco,
+    //     NETWORK: network,
+    //   },
+    // });
+  } catch (error) {
+    res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "An error occur",
     });
-  const CABLETV = await cabletvModel.find({});
-  if (user.apiToken === undefined) {
-    const generatedRandomToken = randomToken.generate(30);
-    await User.updateOne(
-      { email: user.email },
-      { $set: { apiToken: generatedRandomToken } },
-      { new: true, runValidators: true }
-    );
-    user.apiToken === generatedRandomToken;
   }
-
-  res.status(200).json({
-    user,
-    transactions: userTransaction,
-    isAdmin: userId === process.env.ADMIN_ID ? true : false,
-    isCouponVendor:
-      userId === process.env.COUPON_VENDOR_FAIZ ||
-      userId === process.env.COUPON_VENDOR_YUSUF
-        ? true
-        : false,
-    subscriptionPlans: {
-      MTN: MTN_SME_PRICE,
-      GLO: GLO_PRICE,
-      AIRTEL: AIRTEL_PRICE,
-      NMOBILE: NMOBILE_PRICE,
-      CABLETV: CABLETV,
-      CABLENAME: cableName,
-      DISCO: disco,
-      NETWORK: network,
-    },
-  });
 };
 
 const updateUser = async (req, res) => {

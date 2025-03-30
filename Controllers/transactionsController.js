@@ -68,6 +68,7 @@ const searchTransaction = async (req, res) => {
     acc += cur.trans_volume_ratio;
     return acc;
   }, 0);
+
   // Calculating profit for selected transactions
   const totalProfit = today.reduce((acc, cur) => {
     const currentProfit = isNaN(cur.trans_profit) ? 0 : cur.trans_profit;
