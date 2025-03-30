@@ -1,7 +1,11 @@
 const express = require("express");
 
-const searchTransaction = require("../Controllers/transactionsController");
+const {
+  searchTransaction,
+  getTransactions,
+} = require("../Controllers/transactionsController");
 const router = express.Router();
 
+router.get("/all", getTransactions);
 router.get("/", searchTransaction);
 module.exports = router;

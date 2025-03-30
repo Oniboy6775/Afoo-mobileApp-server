@@ -1,4 +1,6 @@
+const jwt = require("jsonwebtoken");
 const dataModel = require("../Models/dataModel");
+const getStatusCode = require("../Utils/statusCodeMapping");
 
 const fetchDataPlan = async (req, res) => {
   const { network, dataType } = req.query;
@@ -152,9 +154,66 @@ const updatePlan = async (req, res) => {
     res.status(500).json({ msg: "Something went wrong" });
   }
 };
+
+const dataPrice = async (req, res) => {
+  let network = req.params.network;
+  const category = req.params.category;
+
+  console.log({ network });
+
+  if (network == "1") network = "MTN";
+  if (network == "2") network = "GLO";
+  if (network == "3") network = "AIRTEL";
+  if (network == "4") network = "9MOBILE";
+
+  console.log({ network });
+  if (!network)
+    return res.status(400).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "provide a valid network id",
+    });
+  const token = req.header("x-auth-token");
+  let isAdmin = false;
+  if (token) {
+    const verified = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = verified;
+    isAdmin = req.user.userId === process.env.ADMIN_ID;
+  }
+  try {
+    let queryObj = {};
+    if (network) {
+      queryObj.plan_network = network;
+    }
+    if (category && category !== "all") {
+      queryObj.planCategory = category;
+    }
+    let dataList = dataModel.find(queryObj);
+    if (!isAdmin)
+      dataList.select(
+        "-planCostPrice -volumeRatio -partnerPrice -planSupplier"
+      );
+    dataList = await dataList;
+    return res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      data: dataList,
+      msg: "Data price fetched successfully",
+    });
+  } catch (e) {
+    console.log(e);
+    return res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "An error occur",
+    });
+  }
+};
+
 module.exports = {
   fetchDataPlan,
   addPlan,
   deletePlan,
   updatePlan,
+  dataPrice,
 };

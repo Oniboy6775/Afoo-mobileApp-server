@@ -5,11 +5,13 @@ const {
   addPlan,
   updatePlan,
   deletePlan,
+  dataPrice,
 } = require("../Controllers/dataPlanController");
 const isAdmin = require("../Middleware/isAdmin");
 
 const router = express.Router();
 router.get("/", fetchDataPlan);
+router.get("/prices/:network", auth, dataPrice);
 router
   .post("/add", auth, isAdmin, addPlan)
   .patch("/update", auth, isAdmin, updatePlan)

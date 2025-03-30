@@ -1,5 +1,6 @@
 const Transaction = require("../Models/transactionModel");
 const Users = require("../Models/usersModel");
+const getStatusCode = require("../Utils/statusCodeMapping");
 
 const searchTransaction = async (req, res) => {
   const { type, phoneNumber, sort, userName, from, to, status } = req.query;
@@ -176,4 +177,22 @@ const searchTransaction = async (req, res) => {
     transactions: result,
   });
 };
-module.exports = searchTransaction;
+
+const getTransactions = async (req, res) => {
+  try {
+    const transactions = await Transaction.find({}).sort("-createdAt");
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      data: transactions,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "An error occur",
+    });
+  }
+};
+
+module.exports = { searchTransaction, getTransactions };
