@@ -1,15 +1,16 @@
+const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const dataModel = require("../Models/dataModel");
 const getStatusCode = require("../Utils/statusCodeMapping");
 
 const fetchDataPlan = async (req, res) => {
-  const { network, dataType } = req.query;
+  const { network, plan_type } = req.query;
   const queryInfo = {};
   if (network && network !== "all") {
     queryInfo.plan_network = network;
   }
-  if (dataType && dataType !== "all") {
-    queryInfo.plan_type = dataType;
+  if (plan_type && plan_type !== "all") {
+    queryInfo.plan_type = plan_type;
   }
   const plans = await dataModel.find(queryInfo).sort("volumeRatio");
   res.json(plans);
@@ -33,6 +34,8 @@ const addPlan = async (req, res) => {
 
   if (missingFields.length > 0) {
     return res.status(400).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
       msg: `Missing or empty fields: ${missingFields.join(", ")}`,
     });
   }
@@ -52,9 +55,18 @@ const addPlan = async (req, res) => {
       planVolumeRatio,
     } = req.body;
     const networkNumber = { MTN: 1, GLO: 2, AIRTEL: 3, "9MOBILE": 4 };
+
+    const isPlanExist = await dataModel.findOne({ id: planId });
+    if (isPlanExist)
+      return res.status(400).json({
+        status: res.statusCode,
+        status_code: getStatusCode(res.statusCode),
+        msg: "This plan already exist",
+      });
+
     await dataModel.create({
       id: planId,
-      dataplan_id: toString(planId),
+      dataplan_id: planId?.toString(),
       network: networkNumber[planNetwork],
       plan_network: planNetwork,
       plan_type: planType,
@@ -69,21 +81,64 @@ const addPlan = async (req, res) => {
       planCostPrice: planCostPrice,
       isAvailable: planAvailability ? true : false,
     });
-    res.status(200).json({ msg: "The plan has been updated " });
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "Plan added successfully",
+    });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ msg: "Something went wrong" });
+    res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "Something went wrong",
+    });
   }
 };
 const deletePlan = async (req, res) => {
   try {
     const planId = req.query.planId;
+
     if (!planId)
-      return res.status(400).json({ msg: "Plan Id must be provided" });
-    await dataModel.deleteOne({ _id: planId });
-    res.status(200).json({ msg: "Plan Deleted successfully" });
+      return res.status(400).json({
+        status: res.statusCode,
+        status_code: getStatusCode(res.statusCode),
+        msg: "Plan Id must be provided",
+      });
+
+    // Check if planId is a valid MongoDB ObjectId
+    let query = {};
+
+    if (mongoose.Types.ObjectId.isValid(planId)) {
+      query._id = planId;
+    } else {
+      // If not a valid ObjectId, try to find by other fields
+      query.id = planId;
+    }
+
+    const result = await dataModel.deleteOne(query);
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        status: res.statusCode,
+        status_code: getStatusCode(res.statusCode),
+        msg: "No plan found with the provided ID",
+      });
+    }
+
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "Plan deleted successfully",
+    });
   } catch (error) {
-    res.status(500).json({ msg: "Something went wrong" });
+    console.error(error);
+    res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "Internal server error",
+      error: error.message,
+    });
   }
 };
 const updatePlan = async (req, res) => {
@@ -106,6 +161,8 @@ const updatePlan = async (req, res) => {
 
   if (missingFields.length > 0) {
     return res.status(400).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
       msg: `Missing or empty fields: ${missingFields.join(", ")}`,
     });
   }
@@ -148,10 +205,18 @@ const updatePlan = async (req, res) => {
         },
       }
     );
-    res.status(200).json({ msg: "The plan has been updated " });
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "The plan has been updated ",
+    });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ msg: "Something went wrong" });
+    res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "Something went wrong",
+    });
   }
 };
 

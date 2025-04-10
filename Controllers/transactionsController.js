@@ -185,6 +185,7 @@ const getTransactions = async (req, res) => {
       status: res.statusCode,
       status_code: getStatusCode(res.statusCode),
       data: transactions,
+      msg: "Transactions fetched successfully",
     });
   } catch (error) {
     res.status(500).json({
