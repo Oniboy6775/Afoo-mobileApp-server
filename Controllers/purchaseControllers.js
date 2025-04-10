@@ -309,6 +309,9 @@ const validateCableTv = async (req, res) => {
 
 const buyElectricity = async (req, res) => {
   const { meterId, meterNumber, amount, meterType } = req.body;
+
+  // Tesing Phase
+  const isTest = process.env.TEST_MODE === "true";
   const { userId, userType } = req.user;
   const amountToCharge = parseFloat(amount) + 50;
   if (!meterId || !meterNumber || !amount || !meterType) {
@@ -317,6 +320,25 @@ const buyElectricity = async (req, res) => {
   }
   const user = await User.findById(userId);
   const { balance } = user;
+
+  if (isTest) {
+    const receipt = await ELECETRICITY_RECEIPT({
+      package: "electricity token",
+      Status: "success",
+      token: uuid(),
+      meter_number: meterNumber,
+      amountToCharge,
+      balance,
+      userId,
+    });
+    return res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      data: { ...receipt._doc },
+
+      msg: "Test electricity purchase successful",
+    });
+  }
 
   // if (amount < 1000)
   //   return res.status(400).json({ msg: "minimum purchase is 1000" });
@@ -339,7 +361,12 @@ const buyElectricity = async (req, res) => {
       balance,
       userId,
     });
-    res.status(200).json({ msg: msg, receipt });
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: msg,
+      data: { ...receipt._doc },
+    });
   } else {
     // return the charged amount
     await User.updateOne(
