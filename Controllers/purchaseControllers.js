@@ -21,6 +21,8 @@ const buyAirtime = async (req, res) => {
     user: { userId, userType },
     body: { mobile_number, amount, network },
   } = req;
+  // Tesing Phase
+  const isTest = process.env.TEST_MODE === "true";
   const isReseller = userType === "reseller";
   const isApiUser = userType === "api user";
   let amountToCharge = amount * 0.99;
@@ -30,22 +32,56 @@ const buyAirtime = async (req, res) => {
     return res.status(400).json({ msg: "All fields are required" });
   if (amount < 100)
     return res.status(400).json({ msg: "Minimum purchase is 100" });
+
+  let NETWORK = "";
+  if (network == "1") NETWORK = "MTN";
+  if (network == "2") NETWORK = "GLO";
+  if (network == "3") NETWORK = "AIRTEL";
+  if (network == "4") NETWORK = "9MOBILE";
+
+  // If isTest is true, skip balance check and API call
+  if (isTest) {
+    const transactionId = uuid();
+    const payload = {
+      transactionId,
+      planNetwork: NETWORK,
+      status: "success",
+      planName: amount,
+      phoneNumber: mobile_number,
+      amountToCharge,
+      balance: user.balance,
+      userId,
+      userName: user.userName,
+      type: "airtime",
+      apiResponseId: "test-" + transactionId,
+      apiResponse: "Test transaction - no actual airtime purchased",
+      isTest: true,
+    };
+    const receipt = await generateReceipt(payload);
+
+    return res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: `Test ${NETWORK} airtime purchase successful2`,
+      data: { ...receipt._doc },
+    });
+  }
+
+  // Regular flow for non-test transactions
   const { balance } = user;
   if (balance < amountToCharge || balance - amountToCharge < 0)
     return res
       .status(400)
       .json({ msg: "Insufficient balance. Kindly fund your wallet" });
+
+  // Deduct balance based on status (i.e should come after successful transaction)
   await User.updateOne({ _id: userId }, { $inc: { balance: -amountToCharge } });
   const { status, msg, apiResponseId, apiResponse } = await BUYAIRTIME({
     network,
     amount,
     mobile_number,
   });
-  let NETWORK = "";
-  if (network == "1") NETWORK = "MTN";
-  if (network == "2") NETWORK = "GLO";
-  if (network == "3") NETWORK = "AIRTEL";
-  if (network == "4") NETWORK = "9MOBILE";
+
   if (status) {
     const transactionId = uuid();
     const payload = {
@@ -63,13 +99,20 @@ const buyAirtime = async (req, res) => {
       apiResponse,
     };
     const receipt = await generateReceipt(payload);
-    res.status(200).json({ msg: msg, receipt });
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg,
+      data: { ...receipt._doc },
+    });
   } else {
     await User.updateOne(
       { _id: userId },
       { $inc: { balance: +amountToCharge } }
     );
     return res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
       msg: msg || "Transaction failed",
     });
   }
@@ -79,12 +122,14 @@ const buyData = async (req, res) => {
     user: { userId, userType },
     body: { plan, mobile_number, network },
   } = req;
+
+  // Tesing Phase
+  const isTest = process.env.TEST_MODE === "true";
   const isReseller = userType === "reseller";
   const isApiUser = userType === "api user";
   if (!plan || !mobile_number || !network)
     return res.status(400).json({ msg: "All fields are required" });
   const user = await User.findOne({ _id: userId });
-  const { balance } = user;
   const dataTobuy = await Data.findOne({ id: plan });
   if (!dataTobuy)
     return res.status(400).json({ msg: "This data is not available" });
@@ -106,6 +151,44 @@ const buyData = async (req, res) => {
     });
   let amountToCharge = my_price;
   if (isReseller || isApiUser) amountToCharge = resellerPrice || my_price;
+
+  let NETWORK = "";
+  if (network == "1") NETWORK = "MTN";
+  if (network == "2") NETWORK = "GLO";
+  if (network == "3") NETWORK = "AIRTEL";
+  if (network == "6") NETWORK = "9MOBILE";
+
+  // If isTest is true, skip balance check and API call
+  if (isTest) {
+    const transactionId = uuid();
+    const receipt = await generateReceipt({
+      transactionId,
+      planNetwork: NETWORK,
+      planName: `${plan_type} ${dataVolume}`,
+      phoneNumber: mobile_number,
+      status: "success",
+      amountToCharge,
+      balance: user.balance,
+      userId,
+      userName: user.userName,
+      type: "data",
+      volumeRatio: volumeRatio,
+      costPrice: planCostPrice || amountToCharge,
+      response: "Test transaction - no actual data purchased",
+      planType: plan_type,
+      apiResponseId: transactionId,
+      apiResponse: "Test transaction - no actual data purchased",
+    });
+    return res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: `Test ${NETWORK} data purchase successful`,
+      data: { ...receipt._doc },
+    });
+  }
+
+  // Regular flow for non-test transactions
+  const { balance } = user;
   if (balance < amountToCharge || balance - amountToCharge < 0)
     return res
       .status(400)
@@ -115,11 +198,6 @@ const buyData = async (req, res) => {
   let receipt = {};
   let isSuccess = false;
 
-  let NETWORK = "";
-  if (network == "1") NETWORK = "MTN";
-  if (network == "2") NETWORK = "GLO";
-  if (network == "3") NETWORK = "AIRTEL";
-  if (network == "6") NETWORK = "9MOBILE";
   // Checking the cost price of the data
   let { costPrice } = await CostPrice.findOne({ network: NETWORK });
   if (NETWORK === "MTN" && plan_type == "CG") {
@@ -185,10 +263,15 @@ const dataPlans = async (req, res) => {
     res.status(200).json({
       status: res.statusCode,
       status_code: getStatusCode(res.statusCode),
-      data,
+      msg: `Test ${NETWORK} data purchase successful`,
+      data: { ...receipt._doc },
     });
   } catch (error) {
-    res.status(500).json({ msg: "An error occur" });
+    res.status(500).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: "An error occur",
+    });
   }
 };
 const validateMeter = async (req, res) => {

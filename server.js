@@ -92,7 +92,7 @@ app.use("/api/v1/auth", usersRouter);
 app.use("/api/v1/buy", auth, purchaseRouter);
 app.use("/api/v1/fundWallet", fundWalletRouter);
 app.use("/api/v1/admin", adminRouter);
-app.use("/api/v1/transaction", auth, transactionRoute);
+app.use("/api/v1/transactions", auth, transactionRoute);
 app.use("/api/v1/webhook", webhookRoute);
 app.use("/api/v1/generateAcc", generateAcc);
 app.use("/api/v1/dataPlan", dataPlan);
