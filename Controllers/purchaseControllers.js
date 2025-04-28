@@ -294,7 +294,8 @@ const validateMeter = async (req, res) => {
     console.log({ invalid, name, address });
     res.status(200).json({ name, address });
   } catch (error) {
-    console.log(error.response.data);
+    // console.log(error.response.data);
+    console.log(error);
     res.status(500).json({
       msg: error.response.data.name || "An error occur.Please try again later",
     });
