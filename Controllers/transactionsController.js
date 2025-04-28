@@ -3,7 +3,8 @@ const Users = require("../Models/usersModel");
 const getStatusCode = require("../Utils/statusCodeMapping");
 
 const searchTransaction = async (req, res) => {
-  const { type, phoneNumber, sort, userName, from, to, status } = req.query;
+  const { type, phoneNumber, sort, userName, from, to, status, transactionId } =
+    req.query;
   const { AGENT_1, AGENT_2, AGENT_3, ADMIN_ID } = process.env;
   const agents = [AGENT_1, AGENT_2, AGENT_3];
   const isAgent = agents.find((e) => e === req.user.userId) === req.user.userId;
@@ -28,17 +29,16 @@ const searchTransaction = async (req, res) => {
   if (status && status !== "all") {
     queryObject.trans_Status = { $regex: status, $options: "i" };
   }
-  //  filter with userId
-  // if (userName && userId) {
-  //   queryObject.trans_By = userId;
-  // }
+
   if (userName) {
     // queryObject.trans_UserName = userAccount;
     queryObject.trans_UserName = { $regex: userName, $options: "i" };
   }
-  // if (userName) {
-  //   query.trans_By = userId;
-  // }
+  if (transactionId) {
+    // queryObject.trans_UserName = userAccount;
+    queryObject._id = transactionId;
+  }
+
   if (from) {
     queryObject.createdAt = { $gte: from, $lt: to || new Date() };
   }
