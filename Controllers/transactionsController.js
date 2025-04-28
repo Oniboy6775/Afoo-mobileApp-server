@@ -36,7 +36,7 @@ const searchTransaction = async (req, res) => {
   }
   if (transactionId) {
     // queryObject.trans_UserName = userAccount;
-    queryObject._id = transactionId;
+    queryObject.trans_Id = transactionId;
   }
 
   if (from) {
