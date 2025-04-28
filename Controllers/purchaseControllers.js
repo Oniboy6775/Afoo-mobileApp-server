@@ -380,7 +380,12 @@ const buyCableTv = async (req, res) => {
   return res.status(400).json({ msg: "Not available at the moment" });
 };
 const fetchAvailableDiscos = async (req, res) => {
-  return res.status(200).json(disco);
+  return res.status(200).json({
+    status: res.statusCode,
+    status_code: getStatusCode(res.statusCode),
+    msg: `Discos fetched`,
+    data: disco,
+  });
 };
 module.exports = {
   buyAirtime,
