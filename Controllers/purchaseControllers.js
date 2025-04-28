@@ -291,7 +291,7 @@ const validateMeter = async (req, res) => {
       }
     );
     const { invalid, name, address } = ValidateMeterResponse.data;
-    console.log({ invalid, name, address });
+    // console.log({ invalid, name, address });
 
     res.status(200).json({
       status: res.statusCode,
@@ -300,7 +300,7 @@ const validateMeter = async (req, res) => {
       data: { name, address },
     });
   } catch (error) {
-    // console.log(error);
+    console.log(error);
     let msg =
       error?.response?.data?.msg || "An error occur.Please try again later";
     res.status(500).json({
