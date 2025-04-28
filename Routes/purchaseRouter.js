@@ -8,6 +8,7 @@ const {
   validateCableTv,
   buyMtnCGData,
   dataPlans,
+  fetchAvailableDiscos,
 } = require("../Controllers/purchaseControllers");
 const router = express.Router();
 
@@ -18,5 +19,6 @@ router.post("/electricity", buyElectricity);
 router.post("/cableTv", buyCableTv);
 router.post("/validatemeter", validateMeter);
 router.post("/validatecabletv", validateCableTv);
+router.get("/fetchDiscos", fetchAvailableDiscos);
 
 module.exports = router;

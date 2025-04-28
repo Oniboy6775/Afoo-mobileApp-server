@@ -379,6 +379,9 @@ const buyElectricity = async (req, res) => {
 const buyCableTv = async (req, res) => {
   return res.status(400).json({ msg: "Not available at the moment" });
 };
+const fetchAvailableDiscos = async (req, res) => {
+  return res.status(200).json(disco);
+};
 module.exports = {
   buyAirtime,
   buyData,
@@ -387,4 +390,5 @@ module.exports = {
   validateCableTv,
   validateMeter,
   dataPlans,
+  fetchAvailableDiscos,
 };
