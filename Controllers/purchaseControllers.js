@@ -276,7 +276,7 @@ const dataPlans = async (req, res) => {
 };
 const validateMeter = async (req, res) => {
   const { meterNumber, meterId, meterType } = req.body;
-  console.log({ ...req.body });
+  // console.log({ ...req.body });
   if (!meterNumber && !meterId)
     return res.status(400).json({ msg: "All fields are required" });
   try {
@@ -286,18 +286,30 @@ const validateMeter = async (req, res) => {
       {
         headers: {
           Authorization: process.env.DATARELOADED_API_KEY,
+          "x-auth-apikey": process.env.DATARELOADED_API_KEY,
         },
       }
     );
-    // console.log(ValidateMeterResponse);
     const { invalid, name, address } = ValidateMeterResponse.data;
     console.log({ invalid, name, address });
-    res.status(200).json({ name, address });
+
+    res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: `Validated: ${name}`,
+      data: { name, address },
+    });
   } catch (error) {
-    // console.log(error.response.data);
-    console.log(error);
+    // console.log(error);
+    let msg =
+      error?.response?.data?.msg || "An error occur.Please try again later";
     res.status(500).json({
-      msg: error.response.data.name || "An error occur.Please try again later",
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg: msg,
+      data: {
+        msg,
+      },
     });
   }
 };
