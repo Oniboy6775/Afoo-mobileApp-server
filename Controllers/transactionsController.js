@@ -134,17 +134,17 @@ const searchTransaction = async (req, res) => {
     return total;
   };
   let mtnSMESales = calculateStat("MTN", "SME");
-  let mtnSME2Sales = calculateStat("MTN", "SME2");
-  let mtnCGSales = calculateStat("MTN", "CG");
-  let mtnCOUPONSales = calculateStat("MTN", "COUPON");
-  let gloSMESales = calculateStat("GLO", "SME");
-  let gloCGSales = calculateStat("GLO", "CG");
-  let AirtelSMESales = calculateStat("AIRTEL", "SME");
-  let AirtelCGSales = calculateStat("AIRTEL", "CG");
-  let NmobileCGSales = calculateStat("9MOBILE", "CG");
-  let NmobileSMESales = calculateStat("9MOBILE", "SME");
-  let totalDebit = calculateMoneyFlow("DEBIT");
-  let totalCredit = calculateMoneyFlow("CREDIT");
+  // let mtnSME2Sales = calculateStat("MTN", "SME2");
+  // let mtnCGSales = calculateStat("MTN", "CG");
+  // let mtnCOUPONSales = calculateStat("MTN", "COUPON");
+  // let gloSMESales = calculateStat("GLO", "SME");
+  // let gloCGSales = calculateStat("GLO", "CG");
+  // let AirtelSMESales = calculateStat("AIRTEL", "SME");
+  // let AirtelCGSales = calculateStat("AIRTEL", "CG");
+  // let NmobileCGSales = calculateStat("9MOBILE", "CG");
+  // let NmobileSMESales = calculateStat("9MOBILE", "SME");
+  // let totalDebit = calculateMoneyFlow("DEBIT");
+  // let totalCredit = calculateMoneyFlow("CREDIT");
   // console.log({ totalCredit, totalDebit });
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || (isAdmin || isAgent ? 100 : 30);
@@ -158,15 +158,15 @@ const searchTransaction = async (req, res) => {
     stat: isAdmin
       ? [
           mtnSMESales,
-          mtnSME2Sales,
-          mtnCGSales,
-          mtnCOUPONSales,
-          gloSMESales,
-          gloCGSales,
-          AirtelCGSales,
-          AirtelSMESales,
-          NmobileCGSales,
-          NmobileSMESales,
+          // mtnSME2Sales,
+          // mtnCGSales,
+          // mtnCOUPONSales,
+          // gloSMESales,
+          // gloCGSales,
+          // AirtelCGSales,
+          // AirtelSMESales,
+          // NmobileCGSales,
+          // NmobileSMESales,
         ]
       : [],
     totalPages,
