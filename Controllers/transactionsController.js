@@ -152,9 +152,8 @@ const searchTransaction = async (req, res) => {
   result = await result.skip(skip).limit(limit);
   let noOfTransaction = await Transaction.countDocuments(queryObject);
   const totalPages = Math.ceil(noOfTransaction / limit);
-  // console.log(result);
-  // console.log({ result });
-  res.status(200).json({
+
+  const data = {
     stat: isAdmin
       ? [
           mtnSMESales,
@@ -175,6 +174,12 @@ const searchTransaction = async (req, res) => {
     // totalDebit,
     // totalCredit,
     transactions: result,
+  };
+  return res.status(200).json({
+    status: res.statusCode,
+    status_code: getStatusCode(res.statusCode),
+    msg: `Transactions fetched`,
+    data: data,
   });
 };
 
