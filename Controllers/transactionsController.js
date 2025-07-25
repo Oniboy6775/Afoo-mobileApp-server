@@ -172,8 +172,8 @@ const searchTransaction = async (req, res) => {
     totalPages,
     totalSales,
     totalProfit,
-    totalDebit,
-    totalCredit,
+    // totalDebit,
+    // totalCredit,
     transactions: result,
   });
 };
