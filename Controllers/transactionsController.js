@@ -179,7 +179,9 @@ const searchTransaction = async (req, res) => {
     status: res.statusCode,
     status_code: getStatusCode(res.statusCode),
     msg: `Transactions fetched`,
-    data: { ...data, page, limit },
+    data: data,
+    page,
+    limit,
   });
 };
 
