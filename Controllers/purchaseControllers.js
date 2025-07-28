@@ -236,7 +236,12 @@ const buyData = async (req, res) => {
     });
   }
   if (isSuccess) {
-    res.status(200).json({ msg, receipt });
+    return res.status(200).json({
+      status: res.statusCode,
+      status_code: getStatusCode(res.statusCode),
+      msg,
+      data: receipt,
+    });
   } else {
     await User.updateOne(
       { _id: userId },
