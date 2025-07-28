@@ -23,6 +23,7 @@ const buyAirtime = async ({ network, mobile_number, amount }) => {
       {
         headers: {
           Authorization: process.env.DATARELOADED_API_KEY,
+          "x-auth-apikey": process.env.DATARELOADED_API_KEY,
         },
       }
     );

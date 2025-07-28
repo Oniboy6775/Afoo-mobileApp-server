@@ -12,6 +12,7 @@ const BUYDATA = async ({ network, mobile_number, plan }) => {
       {
         headers: {
           Authorization: process.env.DATARELOADED_API_KEY,
+          "x-auth-apikey": process.env.DATARELOADED_API_KEY,
         },
       }
     );
