@@ -244,6 +244,8 @@ const searchUsers = async (req, res) => {
     totalPages,
     totalUsers: noOfUsers,
     totalBalance: allBalance,
+    page,
+    limit,
   });
 };
 const updatePrice = async (req, res) => {

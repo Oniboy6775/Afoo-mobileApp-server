@@ -99,7 +99,8 @@ app.use("/api/v1/dataPlan", dataPlan);
 
 app.use("/api/v1/*", (req, res) => {
   console.log(req.body);
-  res.status(200).json({ msg: "API is working fine" });
+  // res.status(200).json({ msg: "API is working fine" });
+  throw new Error("Route does not exist");
 });
 // ONLY WHEN READY TO DEPLOY
 
